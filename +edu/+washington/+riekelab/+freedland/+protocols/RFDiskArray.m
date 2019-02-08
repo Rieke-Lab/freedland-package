@@ -89,7 +89,17 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Recombine trajectories
             obj.xTraj = baseMovement.x + fixMovement.x;
             obj.yTraj = baseMovement.y + fixMovement.y;
-            obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % DOVES resolution  
+            
+            % We do not need to consider the entire trajectory, however.
+            frames = round((obj.stimTime + 50) / 1000 * 200); % # of frames in DOVES database, with 50ms cushion
+            if size(obj.xTraj,2) <= frames
+                frames = size(obj.xTraj,2);
+            end
+            % This enables a faster computation time for shorter stimTimes
+            % to help refine parameters.
+            obj.xTraj = obj.xTraj(1,1:frames);
+            obj.yTraj = obj.yTraj(1,1:frames);
+            obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % DOVES resolution
               
             % Identify corresponding RF Filter
             [RFFilter,~,sizing] = calculateFilter(obj);
@@ -120,12 +130,13 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) = k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) + 360; % add
             end
            
+            % The case with no slices
             if obj.xAxisSlice == false && obj.yAxisSlice == false
                 obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2));
                 for a = 1:size(obj.radii,2) - 1
                     obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
                         & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
-                    % apply boost if desired
+                    % Apply boost if desired
                     if obj.boost == true
                         if obj.radii(1,a) >= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,1))&& ...
                                 obj.radii(1,a+1) <= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,2))
@@ -133,7 +144,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                         end
                     end
                 end
-            else
+            else % The case with slices
                 obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2),size(obj.theta,2) - 1);
                 for a = 1:size(obj.radii,2) - 1
                     for b = 1:size(obj.theta,2) - 1
@@ -152,7 +163,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 end
             end
             
-            % build surround mask to ensure no pixels leak around edges.
+            % Build surround mask to ensure no natural image pixels leak around edges.
             [xx, yy] = meshgrid(1:2*canvasSize(1),1:2*canvasSize(2));
             m = sqrt((xx-canvasSize(1)).^2+(yy-canvasSize(2)).^2);
             obj.surroundMask = m >= (max(obj.radii).*(1-obj.diskExpand/100));
@@ -163,6 +174,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.xTraj = obj.xTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.yTraj = obj.yTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
         
+            % Only apply masks on second run-thru
             obj.counter = 0;
         end
         
@@ -204,10 +216,10 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             function p = getScenePosition(obj, time, p0)
                 if time < 0
                     p = p0;
-                elseif time > obj.timeTraj(end) %out of eye trajectory, hang on last frame
+                elseif time > obj.timeTraj(end) % Beyond eye trajectory, hang on last frame
                     p(1) = p0(1) + obj.xTraj(end);
                     p(2) = p0(2) + obj.yTraj(end);
-                else % within eye trajectory and stim time
+                else % Within eye trajectory and stim time
                     dx = interp1(obj.timeTraj,obj.xTraj,time);
                     dy = interp1(obj.timeTraj,obj.yTraj,time);
                     p(1) = p0(1) + dx;
@@ -224,7 +236,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             %%%%%% Apply masks %%%%%%
             
-            if obj.counter == 1
+            if obj.counter == 1 % second-run through
             
                 % background mask (avoid leaking pixels on edge)
                 surround = stage.builtin.stimuli.Rectangle();
@@ -238,7 +250,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 
                 if obj.xAxisSlice == false && obj.yAxisSlice == false
 
-                    % disk masks
+                    % no slices, assumes radial symmetry.
                     for q = 1:size(obj.linear,1)
                         annulus = stage.builtin.stimuli.Rectangle();
                         annulus.position = canvasSize/2;
@@ -254,7 +266,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                         p.addController(annulusLED);              
                     end
                 else
-                    % disk masks
+                    % with slices, more complex averaging.
                     for q = 1:size(obj.linear,1)
                         for s = 1:size(obj.linear,2)
                             annulus = stage.builtin.stimuli.Rectangle();
@@ -277,7 +289,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 end
             end
             
-             % annulus background function for linear equivalent disc.
+            % Match mask color to linear equivalency in real time.
             function s = getBackground(obj, time, equivalency)
                 if time < 0 || time > obj.timeTraj(end)
                     s = obj.backgroundIntensity;
@@ -289,20 +301,21 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.counter = mod(obj.counter + 1,2);
         end
         
+        % Calculate RF Filter
         function [g, b, f] = calculateFilter(obj)
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % identify screen size
 
-            % convert to pixels
+            % Convert to pixels
             centerSigmaPix = obj.rig.getDevice('Stage').um2pix(obj.rfSigmaCenter);
             surroundSigmaPix = obj.rig.getDevice('Stage').um2pix(obj.rfSigmaSurround);
 
             centerGaus = fspecial('gaussian',[canvasSize(2) canvasSize(1)],centerSigmaPix);
             surroundGaus = fspecial('gaussian',[canvasSize(2) canvasSize(1)],surroundSigmaPix);
 
-            % calculate difference of gaussians
+            % Calculate difference of gaussians
             diffGaussian.raw = centerGaus - surroundGaus;
 
-            % we want to make our background light level > 0 s.t. we can
+            % We want to make our background light level > 0 s.t. we can
             % observe inhibitory effects
             filte = diffGaussian.raw ./ max(diffGaussian.raw(:)); % pre-normalize filter
             supp = abs(min(filte(:))); % pre-normalize suppressive region
@@ -323,11 +336,12 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             centerRes = sizing .* len; % make values index
             centerRes(centerRes == 0) = [];
             
-            % this parameter determines the sizing of the center/surround RF
+            % This parameter determines the sizing of the center/surround RF
             f(1,1) = min(centerRes);
             f(1,2) = max(centerRes);
         end
         
+        % Apply RF Filter over the entire trajectory.
         function [r, m] = weightedTrajectory(obj, img, RFFilter)
             
             % calculate trajectory size
@@ -351,8 +365,6 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % create trajectory  
             r = zeros(size(m,1),size(m,2),1,size(obj.xTraj,2));
-            
-            % create trajectory
             for a = 1:size(obj.xTraj,2)
                 % create image
                tempImg = img(obj.yTraj(1,a)-yRange:obj.yTraj(1,a)+yRange,obj.xTraj(1,a)-xRange:obj.xTraj(1,a)+xRange); 
@@ -360,6 +372,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             end
         end
         
+        % Calculate linear equivalency without slices
         function [q, radius] = linearEquivalency(obj, r, m, sizing)
             
             q = zeros(obj.disks,size(r,4));
@@ -428,6 +441,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             end
         end
         
+        % Calculate linear equivalency with slices
         function [q, radius, theta] = linearEquivalencySliced(obj, r, m, sizing)
             
             imgSize = [size(r,1) size(r,2)];

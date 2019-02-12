@@ -91,7 +91,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.yTraj = baseMovement.y + fixMovement.y;
             
             % We do not need to consider the entire trajectory, however.
-            frames = round((obj.stimTime + 50) / 1000 * 200); % # of frames in DOVES database, with 50ms cushion
+            frames = round((obj.stimTime + 50) / 1000 * 200); % max # of frames in DOVES database, with 50ms cushion
             if size(obj.xTraj,2) <= frames
                 frames = size(obj.xTraj,2);
             end

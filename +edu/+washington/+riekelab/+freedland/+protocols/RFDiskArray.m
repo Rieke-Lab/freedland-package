@@ -11,7 +11,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         amplification = 1; % amplify fixations by X.        
         rfSigmaCenter = 60; % (um) enter from difference of gaussians fit, for overlaying RF
         rfSigmaSurround = 160; % (um) enter from difference of gaussians fit, for overlaying RF 
-        disks = 20; % number of disks in RF.
+        disks = 10; % number of disks in RF.
         diskFocus = 'none'; % where to place the most masks.
         xAxisSlice = false; % slice all our masks horizontally. Consider each section independently.
         yAxisSlice = false; % slice all our masks vertically. Consider each section independently.
@@ -187,6 +187,12 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('radii', obj.radii);
+            
+            % we will also add some metadata from Stage.
+            epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
+            epoch.addParameter('micronsPerPixel',obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
+            epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
+            epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in pixels
         end
         
         function p = createPresentation(obj)

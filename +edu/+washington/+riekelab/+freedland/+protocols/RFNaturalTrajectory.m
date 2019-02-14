@@ -289,6 +289,12 @@ classdef RFNaturalTrajectory < edu.washington.riekelab.protocols.RiekeLabStagePr
             epoch.addParameter('centerRadius', obj.rig.getDevice('Stage').pix2um(obj.centerRadius.maskR));
             epoch.addParameter('surroundRadius', obj.rig.getDevice('Stage').pix2um(obj.surroundRadius.maskR));
             epoch.addParameter('linearCenterRadius', obj.rig.getDevice('Stage').pix2um(obj.centerRadius.linR));
+            
+            % we will also add some metadata from Stage.
+            epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
+            epoch.addParameter('micronsPerPixel',obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
+            epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
+            epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in pixels
         end
         
         function p = createPresentation(obj)

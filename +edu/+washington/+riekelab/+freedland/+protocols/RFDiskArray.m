@@ -22,6 +22,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         diskFocus = 'none'; % where to place the most masks.
         xSliceFrequency = 1; % how many slices to cut between 0 and 90 degrees.
         ySliceFrequency = 1; % how many slices to cut between 90 and 180 degrees.
+        dontSliceCenter = true; % keep (centermost) linear equivalent disc intact.
         diskEvenness = 1; % Choose 0.1 - 10. 10 = even widths, 0.1 = very uneven widths. Must be >0.
         minimumPixels = 8; % minimum number of pixels required to calculate average.
         maskOpacity = 1; % opacity of linear equivalent disks. good for testing whether disks are correct.
@@ -165,6 +166,12 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                             dist = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
                                 & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
                             th = k >= (obj.theta(1,b)) & k <= (obj.theta(1,b+1));
+       
+                            % fix small gap in middle
+                            if obj.dontSliceCenter == true && a == 1
+                                th = ones(size(k));
+                            end
+                            
                             obj.masks(:,:,a,b) = dist .* th;
                             % apply boost if desired
                             if obj.boost == true
@@ -528,6 +535,11 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 for b = 1:size(theta,2) - 1
                     radiusFilt = m >= radius(1,a) & m <= radius(1,a+1); % calculate filter based on radius
                     angFilt = k >= theta(1,b) & k <= theta(1,b+1);
+                    
+                    if obj.dontSliceCenter == true && a == 1
+                        angFilt = ones(size(angFilt));
+                    end  
+                    
                     filt = radiusFilt .* angFilt;
                     check = filt .* m;
                     check(check == 0) = [];

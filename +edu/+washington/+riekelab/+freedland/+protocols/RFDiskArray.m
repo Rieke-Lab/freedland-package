@@ -2,33 +2,40 @@
 classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
     properties
+        % stimulus times
         preTime = 250 % in ms
         stimTime = 5500 % in ms
         tailTime = 250 % in ms
         
+        % natural image trajectory
         imageNo = 1; % natural image number (1 to 11)
         observerNo = 1; % observer number (1 to 19)
-        amplification = 1; % amplify fixations by X.        
+        amplification = 1; % amplify fixations by X.  
+        trajectory = 'natural'; % which type of stimulus to present: natural image, or linear disk replacement.        
+        
+        % RF field information
         rfSigmaCenter = 60; % (um) enter from difference of gaussians fit, for overlaying RF
-        rfSigmaSurround = 160; % (um) enter from difference of gaussians fit, for overlaying RF 
-        disks = 10; % number of disks in RF.
+        rfSigmaSurround = 160; % (um) enter from difference of gaussians fit, for overlaying RF
+        
+        % disk information
+        disks = 5; % number of disks in RF.
         diskFocus = 'none'; % where to place the most masks.
-        xAxisSlice = false; % slice all our masks horizontally. Consider each section independently.
-        yAxisSlice = false; % slice all our masks vertically. Consider each section independently.
+        xSliceFrequency = 1; % how many slices to cut between 0 and 90 degrees.
+        ySliceFrequency = 1; % how many slices to cut between 90 and 180 degrees.
         diskEvenness = 1; % Choose 0.1 - 10. 10 = even widths, 0.1 = very uneven widths. Must be >0.
         minimumPixels = 8; % minimum number of pixels required to calculate average.
+        maskOpacity = 1; % opacity of linear equivalent disks. good for testing whether disks are correct.
         diskExpand = 0.5; % percent to increase each disk's radius (slight overlaps ensure masks cover natural image completely)
+        
+        % additional parameters
         boost = false; % apply a light level boost to a region?
         boostRegion = [100 300]; % boost levels between both radii (in um).
         boostRegionBy = 0.2; % add (between 0 and 1) light intensity to region.
-         
         offsetWidth = 0 % in microns
         offsetHeight = 0 % in microns
-        
         mirroring = true; % mirror image when reaching an edge.
-        
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(1) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     
@@ -36,6 +43,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         diskFocusType = symphonyui.core.PropertyType('char', 'row', {'none','center','near-center','center/near-surround','near-surround','near/far surround','far-surround'})
+        trajectoryType = symphonyui.core.PropertyType('char', 'row', {'natural','disk'})
         backgroundIntensity
         imageMatrix
         xTraj
@@ -45,7 +53,6 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         radii
         masks
         surroundMask
-        counter
         theta
     end
 
@@ -65,6 +72,11 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+            
+            % ensure re-render is set.
+            if strcmp(obj.trajectory,'disk') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
+                error('Must have prerender set')
+            end
             
             % Identify image
             imageIdentifier = [5 8 13 17 23 27 31 39 56 64 100];
@@ -95,78 +107,88 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             if size(obj.xTraj,2) <= frames
                 frames = size(obj.xTraj,2);
             end
+            
             % This enables a faster computation time for shorter stimTimes
-            % to help refine parameters.
             obj.xTraj = obj.xTraj(1,1:frames);
             obj.yTraj = obj.yTraj(1,1:frames);
             obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % DOVES resolution
-              
-            % Identify corresponding RF Filter
-            [RFFilter,~,sizing] = calculateFilter(obj);
+
+            canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % calculate screen size
             
-            % Prepare trajectory with our RF Filter.
-            [traj, dist] = weightedTrajectory(obj, img2, RFFilter);
-            
-            % Calculate linear equivalency
-            if obj.xAxisSlice == false && obj.yAxisSlice == false
-                [obj.linear, obj.radii] = linearEquivalency(obj, traj, dist, sizing);
-            else
-                [obj.linear, obj.radii, obj.theta] = linearEquivalencySliced(obj, traj, dist, sizing);
-            end
-            
-            obj.radii(isnan(obj.radii)) = []; % remove insufficient radii
-            
-            % Make masks
-            obj.radii = obj.radii .* (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')); % convert from VH to px
-            canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); 
-            [xx, yy] = meshgrid(1:canvasSize(1),1:canvasSize(2));
-            m = sqrt((xx-canvasSize(1)/2).^2+(yy-canvasSize(2)/2).^2); % recalculate for mask size
-            k = atan((xx - canvasSize(1)/2) ./ (yy - canvasSize(2)/2)); % calculate theta
-            k = k ./ max(k(:)) .* 90; % convert to degrees
-            k = abs(k - 90); % rotate for proper coordinates
-            k(1:round(canvasSize(2)/2)-1,:) = k(1:round(canvasSize(2)/2)-1,:) + 180; % finish off
-            
-            if obj.xAxisSlice == false && obj.yAxisSlice == true
-                k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) = k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) + 360; % add
-            end
-           
-            % The case with no slices
-            if obj.xAxisSlice == false && obj.yAxisSlice == false
-                obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2));
-                for a = 1:size(obj.radii,2) - 1
-                    obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
-                        & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
-                    % Apply boost if desired
-                    if obj.boost == true
-                        if obj.radii(1,a) >= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,1))&& ...
-                                obj.radii(1,a+1) <= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,2))
-                            obj.linear(a,:) = obj.linear(a,:) + obj.boostRegionBy;
-                        end
-                    end
+            if strcmp(obj.trajectory,'disk')
+                % Identify corresponding RF Filter
+                [RFFilter,~,sizing] = calculateFilter(obj);
+
+                % Prepare trajectory with our RF Filter.
+                [traj, dist] = weightedTrajectory(obj, img2, RFFilter);
+
+                % Calculate linear equivalency
+                if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
+                    [obj.linear, obj.radii] = linearEquivalency(obj, traj, dist, sizing);
+                else
+                    [obj.linear, obj.radii, obj.theta] = linearEquivalencySliced(obj, traj, dist, sizing);
                 end
-            else % The case with slices
-                obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2),size(obj.theta,2) - 1);
-                for a = 1:size(obj.radii,2) - 1
-                    for b = 1:size(obj.theta,2) - 1
-                        dist = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
+
+                obj.radii(isnan(obj.radii)) = []; % remove insufficient radii
+
+                % Make masks
+                obj.radii = obj.radii .* (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')); % convert from VH to px
+                [xx, yy] = meshgrid(1:canvasSize(1),1:canvasSize(2));
+                m = sqrt((xx-canvasSize(1)/2).^2+(yy-canvasSize(2)/2).^2); % recalculate for mask size
+                k = atan((xx - canvasSize(1)/2) ./ (yy - canvasSize(2)/2)); % calculate theta
+                k = k ./ max(k(:)) .* 90; % convert to degrees
+                k = abs(k - 90); % rotate for proper coordinates
+                k(1:round(canvasSize(2)/2)-1,:) = k(1:round(canvasSize(2)/2)-1,:) + 180; % finish off
+                
+                if obj.xSliceFrequency == 0 && obj.ySliceFrequency > 0 % special case
+                    k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) = k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) + 360; % add
+                end
+                
+                % The case with no slices
+                if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
+                    obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2));
+                    for a = 1:size(obj.radii,2) - 1
+                        obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
                             & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
-                        th = k >= (obj.theta(1,b)) & k <= (obj.theta(1,b+1));
-                        obj.masks(:,:,a,b) = dist .* th;
-                        % apply boost if desired
+                        % Apply boost if desired
                         if obj.boost == true
                             if obj.radii(1,a) >= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,1))&& ...
                                     obj.radii(1,a+1) <= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,2))
-                                obj.linear(a,b,:) = obj.linear(a,b,:) + obj.boostRegionBy;
+                                obj.linear(a,:) = obj.linear(a,:) + obj.boostRegionBy;
+                            end
+                        end
+                    end
+                else % The case with slices
+                    obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2),size(obj.theta,2) - 1);
+                    for a = 1:size(obj.radii,2) - 1
+                        for b = 1:size(obj.theta,2) - 1
+                            dist = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
+                                & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
+                            th = k >= (obj.theta(1,b)) & k <= (obj.theta(1,b+1));
+                            obj.masks(:,:,a,b) = dist .* th;
+                            % apply boost if desired
+                            if obj.boost == true
+                                if obj.radii(1,a) >= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,1))&& ...
+                                        obj.radii(1,a+1) <= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,2))
+                                    obj.linear(a,b,:) = obj.linear(a,b,:) + obj.boostRegionBy;
+                                end
                             end
                         end
                     end
                 end
+            else
+                obj.radii = max(canvasSize) / 2;
             end
             
             % Build surround mask to ensure no natural image pixels leak around edges.
             [xx, yy] = meshgrid(1:2*canvasSize(1),1:2*canvasSize(2));
             m = sqrt((xx-canvasSize(1)).^2+(yy-canvasSize(2)).^2);
             obj.surroundMask = m >= (max(obj.radii).*(1-obj.diskExpand/100));
+            protectiveMask = zeros(2*canvasSize(2),2*canvasSize(1));
+            protectiveMask(round(canvasSize(2)) - ceil(canvasSize(2)/2) : round(canvasSize(2)) + ceil(canvasSize(2)/2), ...
+                round(canvasSize(1)) - ceil(canvasSize(1)/2) : round(canvasSize(1)) + ceil(canvasSize(1)/2)) = 1;
+            protectiveMask = abs(protectiveMask - 1);
+            obj.surroundMask = obj.surroundMask + protectiveMask; 
             
             % Adjust axes and units for monitor (VH Pixels)
             obj.xTraj = -(obj.xTraj - size(img,2)/2);
@@ -174,8 +196,6 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.xTraj = obj.xTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.yTraj = obj.yTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
         
-            % Only apply masks on second run-thru
-            obj.counter = 0;
         end
         
         function prepareEpoch(obj, epoch)
@@ -242,25 +262,26 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             %%%%%% Apply masks %%%%%%
             
-            if obj.counter == 1 % second-run through
+            % always apply far-surround mask (avoid leaking pixels on edge)
+            surround = stage.builtin.stimuli.Rectangle();
+            surround.position = canvasSize/2;
+            surround.size = [2*canvasSize(1) 2*canvasSize(2)];
+            surround.color = obj.backgroundIntensity;
+            annulusS = uint8(obj.surroundMask*255);
+            surroundMaskX = stage.core.Mask(annulusS);
+            surround.setMask(surroundMaskX);
+            p.addStimulus(surround);
             
-                % background mask (avoid leaking pixels on edge)
-                surround = stage.builtin.stimuli.Rectangle();
-                surround.position = canvasSize/2;
-                surround.size = [2*canvasSize(1) 2*canvasSize(2)];
-                surround.color = obj.backgroundIntensity;
-                annulusS = uint8(obj.surroundMask*255);
-                surroundMaskX = stage.core.Mask(annulusS);
-                surround.setMask(surroundMaskX);
-                p.addStimulus(surround);
+            if strcmp(obj.trajectory,'disk') % second-run through
                 
-                if obj.xAxisSlice == false && obj.yAxisSlice == false
+                if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
 
                     % no slices, assumes radial symmetry.
                     for q = 1:size(obj.linear,1)
                         annulus = stage.builtin.stimuli.Rectangle();
                         annulus.position = canvasSize/2;
                         annulus.size = [canvasSize(1) canvasSize(2)];
+                        annulus.opacity = obj.maskOpacity;
                         annulusA = uint8(obj.masks(:,:,q)*255);
                         annulusMaskX = stage.core.Mask(annulusA);
                         annulus.setMask(annulusMaskX);
@@ -278,6 +299,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                             annulus = stage.builtin.stimuli.Rectangle();
                             annulus.position = canvasSize/2;
                             annulus.size = [canvasSize(1) canvasSize(2)];
+                            annulus.opacity = obj.maskOpacity;
                             annulusA = uint8(obj.masks(:,:,q,s)*255);
                             annulusMaskX = stage.core.Mask(annulusA);
                             annulus.setMask(annulusMaskX);
@@ -303,8 +325,6 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     s = interp1(obj.timeTraj,equivalency,time);
                 end
             end
-            
-            obj.counter = mod(obj.counter + 1,2);
         end
         
         % Calculate RF Filter
@@ -484,13 +504,21 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
             end
             
-            if obj.xAxisSlice == true && obj.yAxisSlice == false
-                theta = [0 180 360];
-            elseif obj.xAxisSlice == false && obj.yAxisSlice == true
-                theta = [90 270 450];
-                k(round(imgSize(2)/2):end,round(imgSize(1)/2):end) = k(round(imgSize(2)/2):end,round(imgSize(1)/2):end) + 360; % add
-            else
-                theta = [0 90 180 270 360];
+            % calculate angles to operate over
+            if obj.xSliceFrequency > 0 && obj.ySliceFrequency == 0
+                thetaX = 90 / obj.xSliceFrequency;
+                theta = 0:thetaX:90-(1E-10);
+                theta = [theta theta + 180 360];
+            elseif obj.xSliceFrequency == 0 && obj.ySliceFrequency > 0
+                thetaY = 90 / obj.ySliceFrequency;
+                theta = 90:thetaY:180-(1E-10);
+                theta = [theta theta + 180 450];
+                k(round(imgSize(1)/2):end,round(imgSize(2)/2):end) = k(round(imgSize(1)/2):end,round(imgSize(2)/2):end) + 360; % add
+            elseif obj.xSliceFrequency > 0 && obj.ySliceFrequency > 0
+                thetaX = 90 / obj.xSliceFrequency;
+                thetaY = 90 / obj.ySliceFrequency;
+                theta = [0:thetaX:90-(1E-10) 90:thetaY:180-(1E-10)];
+                theta = [theta theta + 180 360];
             end
             
             q = zeros(obj.disks,size(theta,2)-1,size(r,4)); % in form [disk #, angle, mean value]
@@ -538,11 +566,11 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared <= obj.numberOfAverages * 2 - 1;
+            tf = obj.numEpochsPrepared <= obj.numberOfAverages - 1;
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted <= obj.numberOfAverages * 2 - 1;
+            tf = obj.numEpochsCompleted <= obj.numberOfAverages - 1;
         end
     end
 end

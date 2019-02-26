@@ -1,4 +1,4 @@
-% Amplify fixations with a carefully probed visual field.
+% Replace a natural movie with a variety of linear equivalent disks.
 classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
     properties
@@ -11,29 +11,29 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         imageNo = 1; % natural image number (1 to 11)
         observerNo = 1; % observer number (1 to 19)
         amplification = 1; % amplify fixations by X.  
-        trajectory = 'natural'; % which type of stimulus to present: natural image, or linear disk replacement.        
+        trajectory = 'natural'; % which type of stimulus to present: natural image, linear disk replacement ,or both?        
         
         % RF field information
         rfSigmaCenter = 60; % (um) enter from difference of gaussians fit, for overlaying RF
         rfSigmaSurround = 160; % (um) enter from difference of gaussians fit, for overlaying RF
         
         % disk information
-        disks = 5; % number of disks in RF.
+        disks = 5; % number of disks that replace the natural image.
         diskFocus = 'none'; % where to place the most masks.
         xSliceFrequency = 1; % how many slices to cut between 0 and 90 degrees.
         ySliceFrequency = 1; % how many slices to cut between 90 and 180 degrees.
-        dontSliceCenter = true; % keep (centermost) linear equivalent disc intact.
-        diskEvenness = 1; % Choose 0.1 - 10. 10 = even widths, 0.1 = very uneven widths. Must be >0.
-        minimumPixels = 8; % minimum number of pixels required to calculate average.
-        maskOpacity = 1; % opacity of linear equivalent disks. good for testing whether disks are correct.
+        disksIgnoreCut = [1 2]; % starting from the center disk and moving outwards, how many disks should we 'forget' to slice?
+        diskEvenness = 1; % alters width of disks. choose 0.1 - 10. 10 = even widths, 0.1 = very uneven widths. Must be >0.
+        minimumPixels = 12; % minimum number of pixels required to calculate average. if under, we will extend our disk width to reach this value.
+        maskOpacity = 1; % opacity of linear equivalent disks. good for checking whether disks line up to the background trajectory.
         diskExpand = 0.5; % percent to increase each disk's radius (slight overlaps ensure masks cover natural image completely)
         
         % additional parameters
-        boost = false; % apply a light level boost to a region?
-        boostRegion = [100 300]; % boost levels between both radii (in um).
-        boostRegionBy = 0.2; % add (between 0 and 1) light intensity to region.
-        offsetWidth = 0 % in microns
-        offsetHeight = 0 % in microns
+        boost = false; % boosts the light level for a region.
+        boostRegion = [100 300]; % boost levels between both radii (in um). not activated if boost is unchecked.
+        boostRegionBy = 0.2; % add (between 0 and 1) light intensity to region. not activated if boost is unchecked.
+        offsetWidth = 0 % in microns. offsets trajectory (x direction) to expose new areas of focus.
+        offsetHeight = 0 % in microns. offsets trajectory (y direction) to expose new areas of focus.
         mirroring = true; % mirror image when reaching an edge.
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(5) % number of epochs to queue
@@ -44,7 +44,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         diskFocusType = symphonyui.core.PropertyType('char', 'row', {'none','center','near-center','center/near-surround','near-surround','near/far surround','far-surround'})
-        trajectoryType = symphonyui.core.PropertyType('char', 'row', {'natural','disk'})
+        trajectoryType = symphonyui.core.PropertyType('char', 'row', {'natural','disk','both'})
         backgroundIntensity
         imageMatrix
         xTraj
@@ -55,6 +55,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         masks
         surroundMask
         theta
+        specifTraj
     end
 
     methods
@@ -70,12 +71,12 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
+                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'groupBy',{'specificTrajectory'});
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
             % ensure re-render is set.
-            if strcmp(obj.trajectory,'disk') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
+            if ~strcmp(obj.trajectory,'natural') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
                 error('Must have prerender set')
             end
             
@@ -116,7 +117,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % calculate screen size
             
-            if strcmp(obj.trajectory,'disk')
+            if ~strcmp(obj.trajectory,'natural') % features any linear equivalency.
                 % Identify corresponding RF Filter
                 [RFFilter,~,sizing] = calculateFilter(obj);
 
@@ -167,8 +168,8 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                                 & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
                             th = k >= (obj.theta(1,b)) & k <= (obj.theta(1,b+1));
        
-                            % fix small gap in middle
-                            if obj.dontSliceCenter == true && a == 1
+                            % ignore cuts in the center
+                            if ismember(a,obj.disksIgnoreCut);
                                 th = ones(size(k));
                             end
                             
@@ -202,6 +203,12 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.yTraj = (obj.yTraj - size(img,1)/2);
             obj.xTraj = obj.xTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.yTraj = obj.yTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
+            
+            if strcmp(obj.trajectory,'natural') || strcmp(obj.trajectory,'both')
+                obj.specifTraj = 0;
+            elseif strcmp(obj.trajectory,'disk')
+                obj.specifTraj = 1;
+            end
         
         end
         
@@ -214,6 +221,10 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('radii', obj.radii);
+            
+            % identify specific trajectory
+            specific = {'natural','disk'};
+            epoch.addParameter('specificTrajectory',specific{1,obj.specifTraj + 1});
             
             % we will also add some metadata from Stage.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -279,7 +290,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             surround.setMask(surroundMaskX);
             p.addStimulus(surround);
             
-            if strcmp(obj.trajectory,'disk') % second-run through
+            if obj.specifTraj == 1
                 
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
 
@@ -331,6 +342,10 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 else 
                     s = interp1(obj.timeTraj,equivalency,time);
                 end
+            end
+            
+            if strcmp(obj.trajectory,'both')
+                obj.specifTraj = mod(obj.specifTraj+1,2); % switch trajectory type
             end
         end
         
@@ -536,7 +551,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     radiusFilt = m >= radius(1,a) & m <= radius(1,a+1); % calculate filter based on radius
                     angFilt = k >= theta(1,b) & k <= theta(1,b+1);
                     
-                    if obj.dontSliceCenter == true && a == 1
+                    if ismember(a,obj.disksIgnoreCut)
                         angFilt = ones(size(angFilt));
                     end  
                     
@@ -578,11 +593,19 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared <= obj.numberOfAverages - 1;
+            if strcmp(obj.trajectory,'both')
+                tf = obj.numEpochsPrepared < obj.numberOfAverages * 2;
+            else
+                tf = obj.numEpochsPrepared < obj.numberOfAverages;
+            end
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted <= obj.numberOfAverages - 1;
+            if strcmp(obj.trajectory,'both')
+                tf = obj.numEpochsCompleted < obj.numberOfAverages * 2;
+            else
+                tf = obj.numEpochsCompleted < obj.numberOfAverages;
+            end
         end
     end
 end

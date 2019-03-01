@@ -1,6 +1,5 @@
 % Replace a natural movie with a variety of linear equivalent disks.
-classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
-
+classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol
     properties
         % stimulus times
         preTime = 250 % in ms
@@ -55,23 +54,22 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         masks
         surroundMask
         theta
-        specifTraj
     end
 
     methods
         
         function didSetRig(obj)
-            didSetRig@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
+            didSetRig@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
             [obj.amp, obj.ampType] = obj.createDeviceNamesProperty('Amp');
         end
 
         function prepareRun(obj)
                    
             % For Symphony
-            prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
+            prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'groupBy',{'specificTrajectory'});
+                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
@@ -203,28 +201,22 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.yTraj = (obj.yTraj - size(img,1)/2);
             obj.xTraj = obj.xTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.yTraj = obj.yTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
-            
-            if strcmp(obj.trajectory,'natural') || strcmp(obj.trajectory,'both')
-                obj.specifTraj = 0;
-            elseif strcmp(obj.trajectory,'disk')
-                obj.specifTraj = 1;
-            end
-        
         end
         
         function prepareEpoch(obj, epoch)
-            prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
+            prepareEpoch@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj, epoch);
             
             device = obj.rig.getDevice(obj.amp);
-            duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+            if ~strcmp(obj.trajectory,'both')
+                duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+            else
+                duration = 2* (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+            end
+            
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('radii', obj.radii);
-            
-            % identify specific trajectory
-            specific = {'natural','disk'};
-            epoch.addParameter('specificTrajectory',specific{1,obj.specifTraj + 1});
             
             % we will also add some metadata from Stage.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -237,7 +229,12 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Prep stage for presentation
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
+                                    
+            if ~strcmp(obj.trajectory,'both')
+                p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
+            else % present both stimuli in succession
+                p = stage.core.Presentation(2 * (obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
+            end
 
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity);
@@ -253,7 +250,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             scene.setMinFunction(GL.LINEAR);
             scene.setMagFunction(GL.LINEAR);
             
-            % Apply eye trajectories to move image around
+            % Apply eye trajectories to move image around.
             scenePosition = stage.builtin.controllers.PropertyController(scene,...
                 'position', @(state)getScenePosition(obj, state.time - obj.preTime/1e3, p0));
             
@@ -290,7 +287,7 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             surround.setMask(surroundMaskX);
             p.addStimulus(surround);
             
-            if obj.specifTraj == 1
+            if ~strcmp(obj.trajectory,'natural') 
                 
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
 
@@ -304,8 +301,18 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                         annulusMaskX = stage.core.Mask(annulusA);
                         annulus.setMask(annulusMaskX);
 
-                        annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                            'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, obj.linear(q,:)));
+                        if ~strcmp(obj.trajectory,'both') 
+                            annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, obj.linear(q,:)));
+                        else
+                            cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+                            annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, obj.linear(q,:)));
+                            
+                            sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
+                                    @(state)state.time >= cycleTime);
+                            p.addController(sceneVisible);
+                        end
 
                         p.addStimulus(annulus);
                         p.addController(annulusLED);              
@@ -325,8 +332,18 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                             F = obj.linear(q,s,:);
                             F = reshape(F, [1 size(F,3)]);
 
-                            annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F));
+                            if ~strcmp(obj.trajectory,'both') 
+                                annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                    'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F));
+                            else
+                                cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+                                annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                    'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F));
+                                
+                                sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
+                                    @(state)state.time >= cycleTime);
+                                p.addController(sceneVisible);
+                            end
 
                             p.addStimulus(annulus);
                             p.addController(annulusLED);     
@@ -342,10 +359,6 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 else 
                     s = interp1(obj.timeTraj,equivalency,time);
                 end
-            end
-            
-            if strcmp(obj.trajectory,'both')
-                obj.specifTraj = mod(obj.specifTraj+1,2); % switch trajectory type
             end
         end
         
@@ -593,19 +606,11 @@ classdef RFDiskArray < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            if strcmp(obj.trajectory,'both')
-                tf = obj.numEpochsPrepared < obj.numberOfAverages * 2;
-            else
-                tf = obj.numEpochsPrepared < obj.numberOfAverages;
-            end
+            tf = obj.numEpochsPrepared < obj.numberOfAverages;
         end
         
         function tf = shouldContinueRun(obj)
-            if strcmp(obj.trajectory,'both')
-                tf = obj.numEpochsCompleted < obj.numberOfAverages * 2;
-            else
-                tf = obj.numEpochsCompleted < obj.numberOfAverages;
-            end
+            tf = obj.numEpochsCompleted < obj.numberOfAverages;
         end
     end
 end

@@ -6,6 +6,7 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
         sweepColor
         recordingType
         storedSweepColor
+        splitEpoch
     end
     
     properties (Access = private)
@@ -25,6 +26,7 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
             ip.addParameter('sweepColor', co(1,:), @(x)ischar(x) || ismatrix(x));
             ip.addParameter('storedSweepColor', 'r', @(x)ischar(x) || isvector(x));
             ip.addParameter('recordingType', [], @(x)ischar(x));
+            ip.addParameter('splitEpoch', false);
             ip.parse(varargin{:});
             
             obj.device = device;
@@ -32,6 +34,7 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
             obj.sweepColor = ip.Results.sweepColor;
             obj.storedSweepColor = ip.Results.storedSweepColor;
             obj.recordingType = ip.Results.recordingType;
+            obj.splitEpoch = ip.Results.splitEpoch;
             
             obj.createUi();
         end
@@ -93,8 +96,14 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
                     y = zeros(size(y));
                     y(res.sp) = 1; %spike binary
                     y = sampleRate*conv(y,newFilt,'same'); %inst firing rate, Hz
-                end
+                end    
                 
+                if obj.splitEpoch == true
+                    g = round(length(y)/2);
+                    y1 = y(1:g);
+                    y2 = y(g+1:end);
+                    x = x(1:g);
+                end
             else
                 x = [];
                 y = [];
@@ -135,15 +144,29 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
                     cInd = 1;
                     warning('Not enough colors supplied for sweeps')
                 end
-                sweep.line = line(x, y, 'Parent', obj.axesHandle,...
-                    'Color', obj.sweepColor(cInd,:));
+                
+                if obj.splitEpoch == true
+                    sweep.line = line(x, y1, 'Parent', obj.axesHandle,...
+                        'Color', 'blue');
+                    sweep.line2 = line(x, y2, 'Parent', obj.axesHandle,...
+                        'Color', 'red');
+                else
+                    sweep.line = line(x, y, 'Parent', obj.axesHandle,...
+                        'Color', obj.sweepColor(cInd,:));
+                end
                 sweep.parameters = parameters;
                 sweep.count = 1;
                 obj.sweeps{end + 1} = sweep;
             else
                 sweep = obj.sweeps{obj.sweepIndex};
                 cy = get(sweep.line, 'YData');
-                set(sweep.line, 'YData', (cy * sweep.count + y) / (sweep.count + 1));
+                if obj.splitEpoch == true
+                    cy2 = get(sweep.line2, 'YData');
+                    set(sweep.line, 'YData', (cy * sweep.count + y1) / (sweep.count + 1));
+                    set(sweep.line2, 'YData', (cy2 * sweep.count + y2) / (sweep.count + 1));
+                else
+                    set(sweep.line, 'YData', (cy * sweep.count + y) / (sweep.count + 1));
+                end
                 sweep.count = sweep.count + 1;
                 obj.sweeps{obj.sweepIndex} = sweep;
             end

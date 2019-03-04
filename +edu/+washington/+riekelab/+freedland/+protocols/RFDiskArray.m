@@ -22,15 +22,12 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         xSliceFrequency = 1; % how many slices to cut between 0 and 90 degrees.
         ySliceFrequency = 1; % how many slices to cut between 90 and 180 degrees.
         disksIgnoreCut = [1 2]; % starting from the center disk and moving outwards, how many disks should we 'forget' to slice?
+        disksIgnoreMask = [0 0]; % starting from the center disk and moving outwards, how many disks should we entirely 'forget' to place? (reveals natural image underneath).
         diskEvenness = 1; % alters width of disks. choose 0.1 - 10. 10 = even widths, 0.1 = very uneven widths. Must be >0.
         minimumPixels = 12; % minimum number of pixels required to calculate average. if under, we will extend our disk width to reach this value.
-        maskOpacity = 1; % opacity of linear equivalent disks. good for checking whether disks line up to the background trajectory.
         diskExpand = 0.5; % percent to increase each disk's radius (slight overlaps ensure masks cover natural image completely)
         
         % additional parameters
-        boost = false; % boosts the light level for a region.
-        boostRegion = [100 300]; % boost levels between both radii (in um). not activated if boost is unchecked.
-        boostRegionBy = 0.2; % add (between 0 and 1) light intensity to region. not activated if boost is unchecked.
         offsetWidth = 0 % in microns. offsets trajectory (x direction) to expose new areas of focus.
         offsetHeight = 0 % in microns. offsets trajectory (y direction) to expose new areas of focus.
         mirroring = true; % mirror image when reaching an edge.
@@ -54,6 +51,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         masks
         surroundMask
         theta
+        specificOpacity
     end
 
     methods
@@ -68,8 +66,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             % For Symphony
             prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
-            obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
+            if strcmp(obj.trajectory,'both')
+                obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
+                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',true);
+            else
+                obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
+                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
+            end
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
@@ -143,23 +146,26 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency > 0 % special case
                     k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) = k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) + 360; % add
                 end
-                
+
                 % The case with no slices
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
                     obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2));
+                    obj.specificOpacity = ones(1,size(obj.masks,3));
                     for a = 1:size(obj.radii,2) - 1
                         obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
                             & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
-                        % Apply boost if desired
-                        if obj.boost == true
-                            if obj.radii(1,a) >= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,1))&& ...
-                                    obj.radii(1,a+1) <= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,2))
-                                obj.linear(a,:) = obj.linear(a,:) + obj.boostRegionBy;
-                            end
+                    end
+                    
+                    for so = 1:size(obj.disksIgnoreMask,2)
+                        r = obj.disksIgnoreMask(1,so);
+                        if r > 0 % check real index.
+                            obj.specificOpacity(1,r) = 0; % set ignored masks to opacity 0.
                         end
                     end
+                    
                 else % The case with slices
                     obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2),size(obj.theta,2) - 1);
+                    obj.specificOpacity = ones(1,size(obj.masks,3),size(obj.masks,4));
                     for a = 1:size(obj.radii,2) - 1
                         for b = 1:size(obj.theta,2) - 1
                             dist = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
@@ -172,16 +178,16 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                             end
                             
                             obj.masks(:,:,a,b) = dist .* th;
-                            % apply boost if desired
-                            if obj.boost == true
-                                if obj.radii(1,a) >= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,1))&& ...
-                                        obj.radii(1,a+1) <= obj.rig.getDevice('Stage').um2pix(obj.boostRegion(1,2))
-                                    obj.linear(a,b,:) = obj.linear(a,b,:) + obj.boostRegionBy;
-                                end
-                            end
                         end
                     end
-                end
+                    
+                    for so = 1:size(obj.disksIgnoreMask,2)
+                        r = obj.disksIgnoreMask(1,so);
+                        if r > 0 % check real index.
+                            obj.specificOpacity(1,r,:) = 0; % set ignored masks to opacity 0.
+                        end
+                    end
+                end                
             else
                 obj.radii = max(canvasSize) / 2;
             end
@@ -226,7 +232,6 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
         
         function p = createPresentation(obj)
-            
             % Prep stage for presentation
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
                                     
@@ -251,11 +256,12 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             scene.setMagFunction(GL.LINEAR);
             
             % Apply eye trajectories to move image around.
+            cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             scenePosition = stage.builtin.controllers.PropertyController(scene,...
-                'position', @(state)getScenePosition(obj, state.time - obj.preTime/1e3, p0));
+                'position', @(state)getScenePosition(obj, rem(state.time - obj.preTime/1e3,cycleTime), p0));
             
             function p = getScenePosition(obj, time, p0)
-                if time < 0
+                if time <= 0
                     p = p0;
                 elseif time > obj.timeTraj(end) % Beyond eye trajectory, hang on last frame
                     p(1) = p0(1) + obj.xTraj(end);
@@ -272,7 +278,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             p.addController(scenePosition);
 
             sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
-                @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
+                @(state)rem(state.time,cycleTime) >= obj.preTime * 1e-3 && rem(state.time,cycleTime) < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
 
             %%%%%% Apply masks %%%%%%
@@ -296,7 +302,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                         annulus = stage.builtin.stimuli.Rectangle();
                         annulus.position = canvasSize/2;
                         annulus.size = [canvasSize(1) canvasSize(2)];
-                        annulus.opacity = obj.maskOpacity;
+                        annulus.opacity = obj.specificOpacity(1,q);
                         annulusA = uint8(obj.masks(:,:,q)*255);
                         annulusMaskX = stage.core.Mask(annulusA);
                         annulus.setMask(annulusMaskX);
@@ -324,7 +330,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                             annulus = stage.builtin.stimuli.Rectangle();
                             annulus.position = canvasSize/2;
                             annulus.size = [canvasSize(1) canvasSize(2)];
-                            annulus.opacity = obj.maskOpacity;
+                            annulus.opacity = obj.specificOpacity(1,q,s);
                             annulusA = uint8(obj.masks(:,:,q,s)*255);
                             annulusMaskX = stage.core.Mask(annulusA);
                             annulus.setMask(annulusMaskX);
@@ -354,9 +360,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             
             % Match mask color to linear equivalency in real time.
             function s = getBackground(obj, time, equivalency)
-                if time < 0 || time > obj.timeTraj(end)
+                if time < 0
                     s = obj.backgroundIntensity;
-                else 
+                elseif time > obj.timeTraj(end)
+                    s = equivalency(1,end); % hold last color
+                else
                     s = interp1(obj.timeTraj,equivalency,time);
                 end
             end

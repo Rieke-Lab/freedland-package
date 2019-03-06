@@ -316,7 +316,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, obj.linear(q,:)));
                             
                             sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
-                                    @(state)state.time >= cycleTime);
+                                    @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
                             p.addController(sceneVisible);
                         end
 
@@ -347,7 +347,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                     'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F));
                                 
                                 sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
-                                    @(state)state.time >= cycleTime);
+                                    @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
                                 p.addController(sceneVisible);
                             end
 

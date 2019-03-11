@@ -26,6 +26,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         diskEvenness = 1; % alters width of disks. choose 0.1 - 10. 10 = even widths, 0.1 = very uneven widths. Must be >0.
         minimumPixels = 12; % minimum number of pixels required to calculate average. if under, we will extend our disk width to reach this value.
         diskExpand = 0.5; % percent to increase each disk's radius (slight overlaps ensure masks cover natural image completely)
+        diskOpacity = 1; % opacity of placed disks. good for checking disks relative to background stimulus.
         
         % additional parameters
         offsetWidth = 0 % in microns. offsets trajectory (x direction) to expose new areas of focus.
@@ -165,7 +166,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                     
                 else % The case with slices
                     obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2),size(obj.theta,2) - 1);
-                    obj.specificOpacity = ones(1,size(obj.masks,3),size(obj.masks,4));
+                    obj.specificOpacity = ones(1,size(obj.masks,3),size(obj.masks,4)) .* obj.diskOpacity;
                     for a = 1:size(obj.radii,2) - 1
                         for b = 1:size(obj.theta,2) - 1
                             dist = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
@@ -173,7 +174,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                             th = k >= (obj.theta(1,b)) & k <= (obj.theta(1,b+1));
        
                             % ignore cuts in the center
-                            if ismember(a,obj.disksIgnoreCut);
+                            if ismember(a,obj.disksIgnoreCut)
                                 th = ones(size(k));
                             end
                             

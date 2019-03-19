@@ -10,23 +10,23 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         imageNo = 1; % natural image number (1 to 11)
         observerNo = 1; % observer number (1 to 19)
         amplification = 1; % amplify fixations by X.  
-        trajectory = 'natural'; % which type of stimulus to present: natural image, linear disk replacement ,or both?        
+        trajectory = 'both'; % which type of stimulus to present: natural image, linear disk replacement, or both?        
         
         % RF field information
         rfSigmaCenter = 60; % (um) enter from difference of gaussians fit, for overlaying RF
         rfSigmaSurround = 160; % (um) enter from difference of gaussians fit, for overlaying RF
         
         % disk information
-        disks = 5; % number of disks that replace the natural image.
-        diskFocus = 'none'; % where to place the most masks.
-        xSliceFrequency = 1; % how many slices to cut between 0 and 90 degrees.
-        ySliceFrequency = 1; % how many slices to cut between 90 and 180 degrees.
+        disks = 4; % number of disks that are evenly placed over a natural image.
+        xSliceFrequency = 2; % how many slices to cut between 0 and 90 degrees.
+        ySliceFrequency = 2; % how many slices to cut between 90 and 180 degrees.
         disksIgnoreCut = [1 2]; % starting from the center disk and moving outwards, how many disks should we 'forget' to slice?
         disksIgnoreMask = [0 0]; % starting from the center disk and moving outwards, how many disks should we entirely 'forget' to place? (reveals natural image underneath).
-        diskEvenness = 1; % alters width of disks. choose 0.1 - 10. 10 = even widths, 0.1 = very uneven widths. Must be >0.
         minimumPixels = 12; % minimum number of pixels required to calculate average. if under, we will extend our disk width to reach this value.
         diskExpand = 0.5; % percent to increase each disk's radius (slight overlaps ensure masks cover natural image completely)
         diskOpacity = 1; % opacity of placed disks. good for checking disks relative to background stimulus.
+        overrideRadii = false; % override evenly placed disks?
+        overrideRadiiVal = [0 100 200 300 400]; % only takes effect if overrideRadii is checked. Adds any number of disks in any distribution (in px). For a 800px monitor, must contain 0 and 400.
         
         % additional parameters
         offsetWidth = 0 % in microns. offsets trajectory (x direction) to expose new areas of focus.
@@ -40,7 +40,6 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        diskFocusType = symphonyui.core.PropertyType('char', 'row', {'none','center','near-center','center/near-surround','near-surround','near/far surround','far-surround'})
         trajectoryType = symphonyui.core.PropertyType('char', 'row', {'natural','disk','both'})
         backgroundIntensity
         imageMatrix
@@ -63,21 +62,20 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
 
         function prepareRun(obj)
-                   
             % For Symphony
             prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
-            if strcmp(obj.trajectory,'both')
+            if strcmp(obj.trajectory,'both') % will split the epoch into two for online analysis.
                 obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
                     obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',true);
-            else
+            else % will keep as a single epoch.
                 obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
                     obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             end
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
-            % ensure re-render is set.
+            % Ensure re-render is set.
             if ~strcmp(obj.trajectory,'natural') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
                 error('Must have prerender set')
             end
@@ -121,16 +119,16 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             
             if ~strcmp(obj.trajectory,'natural') % features any linear equivalency.
                 % Identify corresponding RF Filter
-                [RFFilter,~,sizing] = calculateFilter(obj);
+                [RFFilter,~,~] = calculateFilter(obj);
 
                 % Prepare trajectory with our RF Filter.
                 [traj, dist] = weightedTrajectory(obj, img2, RFFilter);
 
                 % Calculate linear equivalency
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
-                    [obj.linear, obj.radii] = linearEquivalency(obj, traj, dist, sizing);
+                    [obj.linear, obj.radii] = linearEquivalency(obj, traj, dist);
                 else
-                    [obj.linear, obj.radii, obj.theta] = linearEquivalencySliced(obj, traj, dist, sizing);
+                    [obj.linear, obj.radii, obj.theta] = linearEquivalencySliced(obj, traj, dist);
                 end
 
                 obj.radii(isnan(obj.radii)) = []; % remove insufficient radii
@@ -198,8 +196,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             m = sqrt((xx-canvasSize(1)).^2+(yy-canvasSize(2)).^2);
             obj.surroundMask = m >= (max(obj.radii).*(1-obj.diskExpand/100));
             protectiveMask = zeros(2*canvasSize(2),2*canvasSize(1));
-            protectiveMask(round(canvasSize(2)) - ceil(canvasSize(2)/2) : round(canvasSize(2)) + ceil(canvasSize(2)/2), ...
-                round(canvasSize(1)) - ceil(canvasSize(1)/2) : round(canvasSize(1)) + ceil(canvasSize(1)/2)) = 1;
+            protectiveMask(round(canvasSize(2) - ceil(canvasSize(2)/2) + 1) : round(canvasSize(2) + ceil(canvasSize(2)/2) - 1), ...
+                round(canvasSize(1) - ceil(canvasSize(1)/2)) + 1 : round(canvasSize(1) + ceil(canvasSize(1)/2)) - 1) = 1;
             protectiveMask = abs(protectiveMask - 1);
             obj.surroundMask = obj.surroundMask + protectiveMask; 
             
@@ -282,18 +280,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 @(state)rem(state.time,cycleTime) >= obj.preTime * 1e-3 && rem(state.time,cycleTime) < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
 
-            %%%%%% Apply masks %%%%%%
-            
-            % always apply far-surround mask (avoid leaking pixels on edge)
-            surround = stage.builtin.stimuli.Rectangle();
-            surround.position = canvasSize/2;
-            surround.size = [2*canvasSize(1) 2*canvasSize(2)];
-            surround.color = obj.backgroundIntensity;
-            annulusS = uint8(obj.surroundMask*255);
-            surroundMaskX = stage.core.Mask(annulusS);
-            surround.setMask(surroundMaskX);
-            p.addStimulus(surround);
-            
+            %%%%%% Apply masks %%%%%            
             if ~strcmp(obj.trajectory,'natural') 
                 
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
@@ -358,6 +345,16 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                     end
                 end
             end
+            
+            % always apply far-surround mask (avoid leaking pixels on edge)
+            surround = stage.builtin.stimuli.Rectangle();
+            surround.position = canvasSize/2;
+            surround.size = [2*canvasSize(1) 2*canvasSize(2)];
+            surround.color = obj.backgroundIntensity;
+            annulusS = uint8(obj.surroundMask*255);
+            surroundMaskX = stage.core.Mask(annulusS);
+            surround.setMask(surroundMaskX);
+            p.addStimulus(surround);
             
             % Match mask color to linear equivalency in real time.
             function s = getBackground(obj, time, equivalency)
@@ -443,35 +440,15 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
         
         % Calculate linear equivalency without slices
-        function [q, radius] = linearEquivalency(obj, r, m, sizing)
+        function [q, radius] = linearEquivalency(obj, r, m)
             
             q = zeros(obj.disks,size(r,4));
             imgSize = [size(r,1) size(r,2)];
+
+            radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
             
-            % identify center, near-, and far-surround
-            if strcmp(obj.diskFocus,'center')
-                cent =  sizing(1,1) / 3;
-            elseif strcmp(obj.diskFocus,'near-center')
-                cent = sizing(1,1) / 2;
-            elseif strcmp(obj.diskFocus,'center/near-surround')
-                cent = sizing(1,1);
-            elseif strcmp(obj.diskFocus,'near-surround')
-                cent = ((sizing(1,2) - sizing(1,1)) / 2) + sizing(1,1);
-            elseif strcmp(obj.diskFocus,'near/far surround')
-                cent = sizing(1,2);
-            elseif strcmp(obj.diskFocus,'far-surround')
-                cent = ((max(m) - sizing(1,2)) / 2) + sizing(1,2);
-            end
-            
-            % calculate distribution of masks to calculate mean over
-            if ~strcmp(obj.diskFocus,'none')
-                maskDistribution = normpdf(1:max(imgSize)/(obj.disks):max(imgSize),cent,cent ./ obj.diskEvenness);
-                maskDistribution = maskDistribution ./ (max(maskDistribution(:))) - (min(maskDistribution(:))); % normalize
-                maskDistribution = abs(maskDistribution - 1);
-                maskDistribution = maskDistribution ./ sum(maskDistribution(:)) .* max(imgSize);
-                radius = [0 cumsum(maskDistribution)] ./ 2; % this gives us the radius of each mask
-            else
-                radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
+            if obj.overrideRadii == true
+                radius = obj.overrideRadiiVal ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
             end
             
             % calculate mean
@@ -512,7 +489,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
         
         % Calculate linear equivalency with slices
-        function [q, radius, theta] = linearEquivalencySliced(obj, r, m, sizing)
+        function [q, radius, theta] = linearEquivalencySliced(obj, r, m)
             
             imgSize = [size(r,1) size(r,2)];
             
@@ -521,31 +498,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             k = k ./ max(k(:)) .* 90; % convert to degrees
             k = abs(k - 90); % rotate for proper coordinates
             k(1:floor(imgSize(1)/2),:) = k(1:floor(imgSize(1)/2),:) + 180; % finish off
+
+            radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
             
-            % identify center, near-, and far-surround
-            if strcmp(obj.diskFocus,'center')
-                cent =  sizing(1,1) / 3;
-            elseif strcmp(obj.diskFocus,'near-center')
-                cent = sizing(1,1) / 2;
-            elseif strcmp(obj.diskFocus,'center/near-surround')
-                cent = sizing(1,1);
-            elseif strcmp(obj.diskFocus,'near-surround')
-                cent = ((sizing(1,2) - sizing(1,1)) / 2) + sizing(1,1);
-            elseif strcmp(obj.diskFocus,'near/far surround')
-                cent = sizing(1,2);
-            elseif strcmp(obj.diskFocus,'far-surround')
-                cent = ((max(m) - sizing(1,2)) / 2) + sizing(1,2);
-            end
-            
-            % calculate distribution of masks to calculate mean over
-            if ~strcmp(obj.diskFocus,'none')
-                maskDistribution = normpdf(1:max(imgSize)/(obj.disks):max(imgSize),cent,cent ./ obj.diskEvenness);
-                maskDistribution = maskDistribution ./ (max(maskDistribution(:))) - (min(maskDistribution(:))); % normalize
-                maskDistribution = abs(maskDistribution - 1);
-                maskDistribution = maskDistribution ./ sum(maskDistribution(:)) .* max(imgSize);
-                radius = [0 cumsum(maskDistribution)] ./ 2; % this gives us the radius of each mask
-            else
-                radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
+            if obj.overrideRadii == true
+                radius = obj.overrideRadiiVal ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
             end
             
             % calculate angles to operate over

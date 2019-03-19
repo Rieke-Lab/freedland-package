@@ -60,8 +60,7 @@ classdef RFEllipse < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % we will assume a symmetric RF field (response at 0deg = 180deg).
             % this cuts our sampling in half!
-            obj.spotLocationSequence = 0:obj.resolution:180; % in polar coordinates
-            obj.spotLocationSequence(obj.spotLocationSequence == 180) = [];
+            obj.spotLocationSequence = 0:obj.resolution:180-(1E-9); % in polar coordinates
                        
             if obj.randomizeRotation == true
                 obj.spotLocationSequence = obj.spotLocationSequence(randperm(size(obj.spotLocationSequence,2))); % place in random order
@@ -110,7 +109,6 @@ classdef RFEllipse < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             yy = round(cos(theta) * (d / obj.compressVertically) + (canvasSize(1) / 2));
             xx2 = (canvasSize(2) / 2) - round(sin(theta) * (d / obj.compressHorizontally));
             yy2 = (canvasSize(1) / 2) - round(cos(theta) * (d / obj.compressVertically));
-            
             imgMatrix = ones(canvasSize(2),canvasSize(1))*obj.backgroundIntensity; % background intensity for img.
             imgMatrix(xx - obj.circRadius : xx + obj.circRadius,yy - obj.circRadius : yy + obj.circRadius) = circ;
             imgMatrix(xx2 - obj.circRadius : xx2 + obj.circRadius,yy2 - obj.circRadius : yy2 + obj.circRadius) = circ;

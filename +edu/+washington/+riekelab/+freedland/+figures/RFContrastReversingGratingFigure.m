@@ -1,4 +1,4 @@
-classdef MeanResponseFigure < symphonyui.core.FigureHandler
+classdef RFContrastReversingGratingFigure < symphonyui.core.FigureHandler
     
     properties (SetAccess = private)
         device
@@ -7,6 +7,9 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
         recordingType
         storedSweepColor
         splitEpoch
+        temporalFrequency
+        preTime
+        tailTime
     end
     
     properties (Access = private)
@@ -18,7 +21,7 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
     
     methods
         
-        function obj = MeanResponseFigure(device, varargin)
+        function obj = RFContrastReversingGratingFigure(device, varargin)
             co = get(groot, 'defaultAxesColorOrder');
 
             ip = inputParser();
@@ -27,6 +30,9 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
             ip.addParameter('storedSweepColor', 'r', @(x)ischar(x) || isvector(x));
             ip.addParameter('recordingType', [], @(x)ischar(x));
             ip.addParameter('splitEpoch', false);
+            ip.addParameter('temporalFrequency', 4);
+            ip.addParameter('preTime', 0);
+            ip.addParameter('tailTime', 0);
             ip.parse(varargin{:});
             
             obj.device = device;
@@ -35,6 +41,9 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
             obj.storedSweepColor = ip.Results.storedSweepColor;
             obj.recordingType = ip.Results.recordingType;
             obj.splitEpoch = ip.Results.splitEpoch;
+            obj.temporalFrequency = ip.Results.temporalFrequency;
+            obj.preTime = ip.Results.preTime;
+            obj.tailTime = ip.Results.tailTime;
             
             obj.createUi();
         end
@@ -98,12 +107,28 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
                     y = sampleRate*conv(y,newFilt,'same'); %inst firing rate, Hz
                 end    
                 
+                % split into temporal frequency
+                temporalLength = sampleRate / obj.temporalFrequency;
+                x = 1:temporalLength;
+                y = y(1,obj.preTime*10:end-obj.tailTime*10); % only consider grating stimulus
+                
+                tempY = zeros(floor(size(y,2)/temporalLength),size(x,2));
+                
+                for a = 0:size(tempY,1)-1
+                    tempY(a+1,:) = y(1,a*temporalLength+1 : a*temporalLength + temporalLength);
+                end
+                
+                % remove rows, just in case.
+                tempY = tempY(any(tempY,2),:);
+                y = mean(tempY); % just present average temporal freq.
+                
                 if obj.splitEpoch == true
                     g = floor(length(y)/2);
                     y1 = y(1:g);
                     y2 = y(g+1:2*g);
                     x = x(1:g);
                 end
+               
             else
                 x = [];
                 y = [];

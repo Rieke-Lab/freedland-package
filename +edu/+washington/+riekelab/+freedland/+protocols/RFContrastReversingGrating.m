@@ -44,9 +44,10 @@ classdef RFContrastReversingGrating < edu.washington.riekelab.protocols.RiekeLab
             prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
-            obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
+            obj.showFigure('edu.washington.riekelab.freedland.figures.RFContrastReversingGratingFigure',...
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,...
-                'groupBy',{'outerRadius'});
+                'groupBy',{'currentBarWidth'},'temporalFrequency',obj.temporalFrequency,...
+                'preTime',obj.preTime,'tailTime',obj.tailTime);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
@@ -126,15 +127,15 @@ classdef RFContrastReversingGrating < edu.washington.riekelab.protocols.RiekeLab
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(grateVisible);
             
-            obj.radiiCounter = mod(obj.radiiCounter+1,(length(obj.radii)-1));
-            obj.outerRadii = obj.radii(1,obj.radiiCounter+2);
-            obj.innerRadii = obj.radii(1,obj.radiiCounter+1);
-            
-            if obj.radiiCounter == 0;
-                obj.barCounter = mod(obj.barCounter + 1,length(obj.barCounter)+1);
+            obj.barCounter = mod(obj.barCounter + 1,length(obj.barWidthSequence)-1); % change bar sizes first
+                
+            if obj.barCounter == 0
+                obj.radiiCounter = mod(obj.radiiCounter+1,(length(obj.radii)-1)); % then change location
             end
             
             obj.currentBarWidth = obj.barWidthSequence(obj.barCounter+1);
+            obj.outerRadii = obj.radii(1,obj.radiiCounter+2);
+            obj.innerRadii = obj.radii(1,obj.radiiCounter+1);
         end
         
         function prepareEpoch(obj, epoch)

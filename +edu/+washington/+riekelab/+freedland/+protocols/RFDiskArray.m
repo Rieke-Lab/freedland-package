@@ -1,5 +1,5 @@
 % Replace a natural movie with a variety of linear equivalent disks.
-classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol
+classdef RFVarianceTest < edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol
     properties
         % stimulus times
         preTime = 250 % in ms
@@ -28,6 +28,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         overrideRadii = false; % override evenly placed disks?
         overrideRadiiVal = [0 100 200 300 400]; % only takes effect if overrideRadii is checked. Adds any number of disks in any distribution (in px). For a 800px monitor, must contain 0 and 400.
         
+        % variance equivalent disks
+        addVariance = false;
+        disksAddVariance = [0 0]; % starting from the center disk and moving outwards, how many disks should we instead place a variance-equivalent disk?
+        spatialFrequency = 100; % pixels per cycle
+        
         % additional parameters
         offsetWidth = 0 % in microns. offsets trajectory (x direction) to expose new areas of focus.
         offsetHeight = 0 % in microns. offsets trajectory (y direction) to expose new areas of focus.
@@ -52,6 +57,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         surroundMask
         theta
         specificOpacity
+        variance
     end
 
     methods
@@ -126,9 +132,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
 
                 % Calculate linear equivalency
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
-                    [obj.linear, obj.radii] = linearEquivalency(obj, traj, dist);
+                    [obj.linear, obj.radii, obj.variance] = linearEquivalency(obj, traj, dist);
                 else
-                    [obj.linear, obj.radii, obj.theta] = linearEquivalencySliced(obj, traj, dist);
+                    [obj.linear, obj.radii, obj.theta, obj.variance] = linearEquivalencySliced(obj, traj, dist);
                 end
 
                 obj.radii(isnan(obj.radii)) = []; % remove insufficient radii
@@ -149,7 +155,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 % The case with no slices
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
                     obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2));
-                    obj.specificOpacity = ones(1,size(obj.masks,3));
+                    obj.specificOpacity = ones(1,size(obj.masks,3)) .* obj.diskOpacity;
                     for a = 1:size(obj.radii,2) - 1
                         obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
                             & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
@@ -174,6 +180,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                             % ignore cuts in the center
                             if ismember(a,obj.disksIgnoreCut)
                                 th = ones(size(k));
+                                obj.specificOpacity(1,a,2:end) = 0; % no need to place more than one mask.
                             end
                             
                             obj.masks(:,:,a,b) = dist .* th;
@@ -287,60 +294,137 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
 
                     % no slices, assumes radial symmetry.
                     for q = 1:size(obj.linear,1)
-                        annulus = stage.builtin.stimuli.Rectangle();
-                        annulus.position = canvasSize/2;
-                        annulus.size = [canvasSize(1) canvasSize(2)];
-                        annulus.opacity = obj.specificOpacity(1,q);
-                        annulusA = uint8(obj.masks(:,:,q)*255);
-                        annulusMaskX = stage.core.Mask(annulusA);
-                        annulus.setMask(annulusMaskX);
-
-                        if ~strcmp(obj.trajectory,'both') 
-                            annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, obj.linear(q,:)));
-                        else
-                            cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
-                            annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, obj.linear(q,:)));
-                            
-                            sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
-                                    @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
-                            p.addController(sceneVisible);
-                        end
-
-                        p.addStimulus(annulus);
-                        p.addController(annulusLED);              
-                    end
-                else
-                    % with slices, more complex averaging.
-                    for q = 1:size(obj.linear,1)
-                        for s = 1:size(obj.linear,2)
+                        if obj.specificOpacity(1,q) > 0 && ~ismember(q,obj.disksAddVariance) % only place relevant masks.
                             annulus = stage.builtin.stimuli.Rectangle();
                             annulus.position = canvasSize/2;
                             annulus.size = [canvasSize(1) canvasSize(2)];
-                            annulus.opacity = obj.specificOpacity(1,q,s);
-                            annulusA = uint8(obj.masks(:,:,q,s)*255);
+                            annulus.opacity = obj.specificOpacity(1,q);
+                            annulusA = uint8(obj.masks(:,:,q)*255);
                             annulusMaskX = stage.core.Mask(annulusA);
                             annulus.setMask(annulusMaskX);
-                            
-                            F = obj.linear(q,s,:);
-                            F = reshape(F, [1 size(F,3)]);
 
                             if ~strcmp(obj.trajectory,'both') 
                                 annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                    'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F));
+                                    'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, obj.linear(q,:)));
                             else
                                 cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
                                 annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                    'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F));
-                                
+                                    'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, obj.linear(q,:)));
+
+                                sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
+                                        @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
+                                p.addController(sceneVisible);
+                            end
+
+                            p.addStimulus(annulus);
+                            p.addController(annulusLED);     
+                        
+                        elseif obj.specificOpacity(1,q) > 0 && ismember(q,obj.disksAddVariance) % only place relevant masks.
+                            
+                            annulus = stage.builtin.stimuli.Grating();
+                            annulus.position = canvasSize/2;
+                            annulus.size = [canvasSize(1) canvasSize(2)]; 
+                            annulus.opacity = 1;
+                            annulus.orientation = 0; % apply orthogonal gratings
+                            annulus.spatialFreq = 1/obj.spatialFrequency;
+                            annulusA = uint8(obj.masks(:,:,q)*255);
+                            annulusMaskX = stage.core.Mask(annulusA);
+                            annulus.setMask(annulusMaskX);
+
+                            if ~strcmp(obj.trajectory,'both') 
+                                annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                    'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, obj.linear(q,:)));
+                                annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                    'contrast', @(state)getContrast(obj, state.time - obj.preTime/1e3, obj.variance(q,:)));
+                            else
+                                cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+                                annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                    'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, obj.linear(q,:)));
+                                annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                    'contrast', @(state)getContrast(obj, state.time - cycleTime - obj.preTime/1e3, obj.variance(q,:)));
+
                                 sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
                                     @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
                                 p.addController(sceneVisible);
                             end
 
                             p.addStimulus(annulus);
-                            p.addController(annulusLED);     
+                            p.addController(annulusLED); 
+                            p.addController(annulusLEC);                      
+                        end
+                    end
+                else
+                    % with slices, more complex averaging.
+                    for q = 1:size(obj.linear,1)
+                        for s = 1:size(obj.linear,2)
+                            if obj.specificOpacity(1,q,s) > 0 && ~ismember(q,obj.disksAddVariance)% only place relevant masks.
+                                annulus = stage.builtin.stimuli.Rectangle();
+                                annulus.position = canvasSize/2;
+                                annulus.size = [canvasSize(1) canvasSize(2)];
+                                annulus.opacity = obj.specificOpacity(1,q,s);
+                                annulusA = uint8(obj.masks(:,:,q,s)*255);
+                                annulusMaskX = stage.core.Mask(annulusA);
+                                annulus.setMask(annulusMaskX);
+
+                                F = obj.linear(q,s,:);
+                                F = reshape(F, [1 size(F,3)]);
+
+                                if ~strcmp(obj.trajectory,'both') 
+                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F));
+                                else
+                                    cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F));
+
+                                    sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
+                                        @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
+                                    p.addController(sceneVisible);
+                                end
+
+                                p.addStimulus(annulus);
+                                p.addController(annulusLED);  
+                                
+                            elseif obj.specificOpacity(1,q,s) > 0 && ismember(q,obj.disksAddVariance) % add variant disk
+
+                                annulus = stage.builtin.stimuli.Grating();
+                                annulus.position = canvasSize/2;
+                                annulus.size = [canvasSize(1) canvasSize(2)];
+                                annulus.opacity = 1;
+                                annulus.orientation = 0; % apply orthogonal gratings
+                                annulus.spatialFreq = 1/obj.spatialFrequency;
+                                annulusA = uint8(obj.masks(:,:,q,s)*255);
+                                annulusMaskX = stage.core.Mask(annulusA);
+                                annulus.setMask(annulusMaskX);
+
+                                F = obj.linear(q,s,:);
+                                F = reshape(F, [1 size(F,3)]);
+
+                                G = obj.variance(q,s,:);
+                                G = reshape(G, [1 size(G,3)]);
+
+                                if ~strcmp(obj.trajectory,'both') 
+                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F));
+                                    annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                        'contrast', @(state)getContrast(obj, state.time - obj.preTime/1e3, G));
+                                else
+                                    cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F));
+                                    annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                        'contrast', @(state)getContrast(obj, state.time - cycleTime - obj.preTime/1e3, G));
+
+                                    sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
+                                        @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
+                                    p.addController(sceneVisible);
+                                end
+
+                                p.addStimulus(annulus);
+                                p.addController(annulusLED); 
+                                p.addController(annulusLEC); 
+                                
+                            end
                         end
                     end
                 end
@@ -360,6 +444,16 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             function s = getBackground(obj, time, equivalency)
                 if time < 0
                     s = obj.backgroundIntensity;
+                elseif time > obj.timeTraj(end)
+                    s = equivalency(1,end); % hold last color
+                else
+                    s = interp1(obj.timeTraj,equivalency,time);
+                end
+            end
+            
+            function s = getContrast(obj, time, equivalency)
+                if time < 0
+                    s = 0;
                 elseif time > obj.timeTraj(end)
                     s = equivalency(1,end); % hold last color
                 else
@@ -440,9 +534,10 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
         
         % Calculate linear equivalency without slices
-        function [q, radius] = linearEquivalency(obj, r, m)
+        function [q, radius, v] = linearEquivalency(obj, r, m)
             
             q = zeros(obj.disks,size(r,4));
+            v = zeros(obj.disks,size(r,4));
             imgSize = [size(r,1) size(r,2)];
 
             radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
@@ -484,12 +579,16 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                     end
                     
                     q(a,n) = mean(S) / 255;
+                    
+                    if obj.addVariance == true
+                        v(a,n) = sqrt(var(S)) / 255;
+                    end
                 end
             end
         end
         
         % Calculate linear equivalency with slices
-        function [q, radius, theta] = linearEquivalencySliced(obj, r, m)
+        function [q, radius, theta, v] = linearEquivalencySliced(obj, r, m)
             
             imgSize = [size(r,1) size(r,2)];
             
@@ -523,6 +622,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             end
             
             q = zeros(obj.disks,size(theta,2)-1,size(r,4)); % in form [disk #, angle, mean value]
+            v = zeros(obj.disks,size(theta,2)-1,size(r,4)); % in form [disk #, angle, mean value]
             
             % calculate mean
             for a = 1:size(radius,2) - 1
@@ -566,6 +666,10 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                         end
                         
                         q(a,b,n) = mean(S) / 255;
+                        
+                        if obj.addVariance == true
+                            v(a,b,n) = sqrt(var(S)) / 255;
+                        end
                     end
                 end
             end

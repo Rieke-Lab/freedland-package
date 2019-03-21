@@ -29,7 +29,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         contrastDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be contrasted?
         meanContrastDisks = [0 0]; % starting from the center disk and moving outwards, which disks should have both mean and contrast?
         naturalDisks = [0 0];  % starting from the center disk and moving outwards, which disks should remain a natural image?
-        spatialFrequency = 100; % for contrastDisks, how many um per bar? 
+        backgroundDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be left at background intensity?
+        spatialFrequency = 100; % for contrastDisks, how many um per bar? (input from rfReverseContrastGratings) 
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -89,16 +90,17 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             end
             
             checkDisks = sum(1:obj.disks);
-            checkAssignments = sum([obj.meanDisks obj.contrastDisks obj.meanContrastDisks obj.naturalDisks]);
+            checkAssignments = sum([obj.meanDisks obj.contrastDisks obj.meanContrastDisks obj.naturalDisks obj.backgroundDisks]);
             if sum(obj.overrideRadii) > 0
                 obj.overrideRadiiLogical = true; % Identifier for later on
-                checkDisks = sum(1:size(obj.overrideRadii)-1);
+                checkDisks = sum(1:size(obj.overrideRadii,2)-1);
+                obj.disks = size(obj.overrideRadii,2)-1; % Adjust number of disks.
             end
                        
             if checkDisks > checkAssignments
-                error('Please assign all disks.')
+                error('One or more disks left empty. Please assign a disk type.')
             elseif checkDisks < checkAssignments
-                error('Too many disks assigned.')
+                error('Two disk types have been assigned to one location.')
             end
             
             % Identify image
@@ -136,8 +138,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             if ~strcmp(obj.trajectory,'natural') % Features any disk
                 
                 % Set identifiers to false
-                obj.meanDisksLogical = false;
-                obj.contrastDisksLogical = false;
+                obj.meanDisksLogical = zeros(1,obj.disks);
+                obj.contrastDisksLogical = zeros(1,obj.disks);
                 
                 % Identify corresponding RF Filter
                 [RFFilter,~,~] = calculateFilter(obj);
@@ -146,25 +148,26 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 [traj, dist] = weightedTrajectory(obj, img2, RFFilter);
                 
                 % Determine types of masks to calculate
-                if sum(obj.meanDisks) > 0
-                    obj.meanDisksLogical = true;
-                end
+                obj.meanDisks(obj.meanDisks == 0) = [];
+                obj.contrastDisks(obj.contrastDisks == 0) = [];
+                obj.meanContrastDisks(obj.meanContrastDisks == 0) = [];
                 
-                if sum(obj.contrastDisks) > 0
-                    obj.contrastDisksLogical = true;
-                end
+                obj.meanDisksLogical(obj.meanDisks) = 1;
+                obj.contrastDisksLogical(obj.contrastDisks) = 1;
                 
-                if sum(obj.meanContrastDisksLogical) > 0
-                    obj.meanDisksLogical = true;
-                    obj.contrastDisksLogical = true;
-                end
+                obj.meanDisksLogical(obj.meanContrastDisks) = 1;
+                obj.contrastDisksLogical(obj.meanContrastDisks) = 1;
+                
+                tic
 
                 % Calculate different disks
-                if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
+                if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
                     [obj.linear, obj.radii, obj.contrast] = linearEquivalency(obj, traj, dist);
                 else
                     [obj.linear, obj.radii, obj.theta, obj.contrast] = linearEquivalencySliced(obj, traj, dist);
                 end
+                
+                toc
 
                 % Recalculate masks for pixels (instead of VH pixels).
                 obj.diskExpand = 0.5; % expands disks by 0.005x to ensure overlap.   
@@ -183,7 +186,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 end
 
                 % The case with no slices
-                if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
+                if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
                     
                     obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2));
                     obj.specificOpacity = ones(1,size(obj.masks,3)) .* obj.diskOpacity; % Will only place opaque masks
@@ -318,7 +321,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             obj.spatialFrequencyPx = obj.rig.getDevice('Stage').um2pix(obj.spatialFrequency); % Convert to pix
             if ~strcmp(obj.trajectory,'natural') 
                 
-                if obj.xSliceFrequency == 0 && obj.ySliceFrequency == 0
+                if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
                     % No slices, assumes radial symmetry.
                     for q = 1:size(obj.linear,1)
                         if obj.specificOpacity(1,q) > 0 % Only place relevant disks.
@@ -336,7 +339,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 if ismember(q,obj.contrastDisks) % Contrast
                                     annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
                                     'contrast', @(state)getContrast(obj, state.time - obj.preTime/1e3, obj.contrast(q,:)));
-                                    annulus.color = 0; % No color
+                                    annulus.color = obj.backgroundIntensity * 2; % No color
                                     p.addStimulus(annulus); % Add stimulus
                                     p.addController(annulusLEC); % Add disk
                                     
@@ -355,6 +358,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                     p.addStimulus(annulus); % Add stimulus
                                     p.addController(annulusLEC); % Add disks
                                     p.addController(annulusLED); 
+                                
+                                elseif ismember(q,obj.backgroundDisks)
+                                    annulus.contrast = 0;
+                                    annulus.color = obj.backgroundIntensity * 2;  % natively halves value for contrast resolution.
+                                    p.addStimulus(annulus);
                                 end
                                 
                                 % Only allow the scene to be visible at the exact time.
@@ -368,7 +376,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 if ismember(q,obj.contrastDisks) % Contrast
                                     annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
                                         'contrast', @(state)getContrast(obj, state.time - cycleTime - obj.preTime/1e3, obj.contrast(q,:)));
-                                    annulus.color = 0; % No color
+                                    annulus.color = obj.backgroundIntensity * 2; % No color
                                     p.addStimulus(annulus); % Add stimulus
                                     p.addController(annulusLEC); % Add disk
                                     
@@ -387,6 +395,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                     p.addStimulus(annulus); % Add stimulus
                                     p.addController(annulusLEC); % Add disks
                                     p.addController(annulusLED);
+                                
+                                elseif ismember(q,obj.backgroundDisks)
+                                    annulus.contrast = 0;
+                                    annulus.color = obj.backgroundIntensity * 2; % natively halves value for contrast resolution.
+                                    p.addStimulus(annulus);
                                 end
 
                                 % Only allow the scene to be visible at the exact time.
@@ -417,66 +430,78 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 G = obj.contrast(q,s,:);
                                 G = reshape(G, [1 size(G,3)]); % turn into vector
 
-                                if ismember(q,obj.contrastDisks) % Contrast
-                                    annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
-                                    'contrast', @(state)getContrast(obj, state.time - obj.preTime/1e3, G(q,:)));
-                                    annulus.color = 0; % No color
-                                    p.addStimulus(annulus); % Add stimulus
-                                    p.addController(annulusLEC); % Add disk
-                                    
-                                elseif ismember(q,obj.meanDisks)
-                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                    'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F(q,:)));
-                                    annulus.contrast = 0; % No contrast
-                                    p.addStimulus(annulus); % Add stimulus
-                                    p.addController(annulusLED); % Add disk
-                                    
-                                elseif ismember(q,obj.meanContrastDisks)
-                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                    'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F(q,:)));
-                                    annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
-                                    'contrast', @(state)getContrast(obj, state.time - obj.preTime/1e3, G(q,:)));
-                                    p.addStimulus(annulus); % Add stimulus
-                                    p.addController(annulusLEC); % Add disks
-                                    p.addController(annulusLED); 
-                                end
-                                
-                                % Only allow the scene to be visible at the exact time.
-                                sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
-                                    @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
-                                p.addController(sceneVisible);
-                                
-                            else % For successive (double length) epoch.
-                                
-                                cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
-                                if ismember(q,obj.contrastDisks) % Contrast
-                                    annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
-                                        'contrast', @(state)getContrast(obj, state.time - cycleTime - obj.preTime/1e3, G(q,:)));
-                                    annulus.color = 0; % No color
-                                    p.addStimulus(annulus); % Add stimulus
-                                    p.addController(annulusLEC); % Add disk
-                                    
-                                elseif ismember(q,obj.meanDisks)
-                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                        'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F(q,:)));
-                                    annulus.contrast = 0; % No contrast
-                                    p.addStimulus(annulus); % Add stimulus
-                                    p.addController(annulusLED); % Add disk
-                                    
-                                elseif ismember(q,obj.meanContrastDisks)
-                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
-                                        'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F(q,:)));
-                                    annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
-                                        'contrast', @(state)getContrast(obj, state.time - cycleTime - obj.preTime/1e3, G(q,:)));
-                                    p.addStimulus(annulus); % Add stimulus
-                                    p.addController(annulusLEC); % Add disks
-                                    p.addController(annulusLED);
-                                end
+                                if ~strcmp(obj.trajectory,'both') % For single run thru.
+                                    if ismember(q,obj.contrastDisks) % Contrast
+                                        annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                        'contrast', @(state)getContrast(obj, state.time - obj.preTime/1e3, G(1,:)));
+                                        annulus.color = obj.backgroundIntensity * 2; % No color
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLEC); % Add disk
 
-                                % Only allow the scene to be visible at the exact time.
-                                sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
-                                    @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
-                                p.addController(sceneVisible);
+                                    elseif ismember(q,obj.meanDisks)
+                                        annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F(1,:)));
+                                        annulus.contrast = 0; % No contrast
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLED); % Add disk
+
+                                    elseif ismember(q,obj.meanContrastDisks)
+                                        annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, F(1,:)));
+                                        annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                        'contrast', @(state)getContrast(obj, state.time - obj.preTime/1e3, G(1,:)));
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLEC); % Add disks
+                                        p.addController(annulusLED); 
+
+                                    elseif ismember(q,obj.backgroundDisks)
+                                        annulus.contrast = 0;
+                                        annulus.color = obj.backgroundIntensity * 2;  % natively halves value for contrast resolution.
+                                        p.addStimulus(annulus);
+                                    end
+
+                                    % Only allow the scene to be visible at the exact time.
+                                    sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
+                                        @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
+                                    p.addController(sceneVisible);
+                                
+                                else % For successive (double length) epoch.
+                                
+                                    cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+                                    if ismember(q,obj.contrastDisks) % Contrast
+                                        annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                            'contrast', @(state)getContrast(obj, state.time - cycleTime - obj.preTime/1e3, G(1,:)));
+                                        annulus.color = obj.backgroundIntensity * 2; % No color
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLEC); % Add disk
+
+                                    elseif ismember(q,obj.meanDisks)
+                                        annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                            'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F(1,:)));
+                                        annulus.contrast = 0; % No contrast
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLED); % Add disk
+
+                                    elseif ismember(q,obj.meanContrastDisks)
+                                        annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                            'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, F(1,:)));
+                                        annulusLEC = stage.builtin.controllers.PropertyController(annulus,...
+                                            'contrast', @(state)getContrast(obj, state.time - cycleTime - obj.preTime/1e3, G(1,:)));
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLEC); % Add disks
+                                        p.addController(annulusLED);
+
+                                    elseif ismember(q,obj.backgroundDisks)
+                                        annulus.contrast = 0;
+                                        annulus.color = obj.backgroundIntensity * 2;  % natively halves value for contrast resolution.
+                                        p.addStimulus(annulus);
+                                    end
+
+                                    % Only allow the scene to be visible at the exact time.
+                                    sceneVisible = stage.builtin.controllers.PropertyController(annulus, 'visible', ...
+                                        @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
+                                    p.addController(sceneVisible);
+                                end
                                 
                             end
                         end
@@ -499,9 +524,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 if time < 0
                     s = obj.backgroundIntensity;
                 elseif time > obj.timeTraj(end)
-                    s = equivalency(1,end); % hold last color
+                    s = equivalency(1,end) * 2; % Hold last color
                 else
-                    s = interp1(obj.timeTraj,equivalency,time);
+                    s = interp1(obj.timeTraj,equivalency,time) * 2;
                 end
             end
             
@@ -602,31 +627,35 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 radius = obj.overrideRadii ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')); % in VH pixels
             end
                        
-            % Calculate statistics
-            for a = 1:size(radius,2) - 1
-                filt = m >= radius(1,a) & m <= radius(1,a+1); % Logical mask.
-                check = filt .* m;
-                check(check == 0) = [];
-                
-                if size(check,2) < minimumPixels % Not enough pixels to continue
-                    error('Not enough pixels in region. Please change mask radii.')
-                end
-                
-                % Apply filter across full trajectory.
-                for n = 1:size(r,4)
-                    S = r(:,:,1,n) .* filt;
-                    S(S==0) = [];
-                    
-                    if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
-                        S = 0;
-                    end
-                    
-                    if obj.meanDisksLogical == true
-                        q(a,n) = mean(S) / 255;
-                    end
-                    
-                    if obj.contrastDisksLogical == true
-                        v(a,n) = sqrt(var(S)) / 255;
+            if sum([obj.meanDisksLogical,obj.contrastDisksLogical]) > 0 % Check whether the whole trajectory is needed.
+                % Calculate statistics
+                for a = 1:size(radius,2) - 1
+                    if sum([obj.meanDisksLogical(1,a),obj.contrastDisksLogical(1,a)]) > 0 % Only regions where we absolutely need to calculate (speed increase)
+                        filt = m >= radius(1,a) & m <= radius(1,a+1); % Logical mask.
+                        check = filt .* m;
+                        check(check == 0) = [];
+
+                        if size(check,2) < minimumPixels % Not enough pixels to continue
+                            error('Not enough pixels in region. Please change mask radii.')
+                        end
+
+                        % Apply filter across full trajectory.
+                        for n = 1:size(r,4)
+                            S = r(:,:,1,n) .* filt;
+                            S(S==0) = [];
+
+                            if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                S = 0;
+                            end
+
+                            if obj.meanDisksLogical(1,a) == 1
+                                q(a,n) = mean(S) / 255;
+                            end
+
+                            if obj.contrastDisksLogical(1,a) == 1
+                                v(a,n) = sqrt(var(S)) / 255;
+                            end
+                        end
                     end
                 end
             end
@@ -670,39 +699,43 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             q = zeros(obj.disks,size(theta,2)-1,size(r,4)); % in form [disk #, angle, mean value]
             v = zeros(obj.disks,size(theta,2)-1,size(r,4)); % in form [disk #, angle, mean value]
             
-            % Calculate statistics
-            for a = 1:size(radius,2) - 1
-                for b = 1:size(theta,2) - 1
-                    radiusFilt = m >= radius(1,a) & m <= radius(1,a+1); % Radial filter (r)
-                    angFilt = k >= theta(1,b) & k <= theta(1,b+1); % Angular filter (theta)
-                    
-                    if ismember(a,obj.disksIgnoreCut) % Ignore angular filter
-                        angFilt = ones(size(angFilt));
-                    end  
-                    
-                    filt = radiusFilt .* angFilt;
-                    check = filt .* m;
-                    check(check == 0) = [];
+            if sum([obj.meanDisksLogical,obj.contrastDisksLogical]) > 0 % Check whether the whole trajectory is needed.
+                % Calculate statistics
+                for a = 1:size(radius,2) - 1
+                    for b = 1:size(theta,2) - 1
+                        if sum([obj.meanDisksLogical(1,a),obj.contrastDisksLogical(1,a)]) > 0 % Only regions where we absolutely need to calculate (speed increase)
+                            radiusFilt = m >= radius(1,a) & m <= radius(1,a+1); % Radial filter (r)
+                            angFilt = k >= theta(1,b) & k <= theta(1,b+1); % Angular filter (theta)
 
-                    if size(check,2) < minimumPixels % Not enough pixels to continue
-                        error('Not enough pixels in region. Please change mask radii.')
-                    end
+                            if ismember(a,obj.disksIgnoreCut) % Ignore angular filter
+                                angFilt = ones(size(angFilt));
+                            end  
 
-                    % Apply filter across full trajectory.
-                    for n = 1:size(r,4)
-                        S = r(:,:,1,n) .* filt;
-                        S(S==0) = [];
-                        
-                        if isempty(S)
-                            S = 0;
-                        end
-                        
-                        if obj.meanDisksLogical == true
-                            q(a,b,n) = mean(S) / 255;
-                        end
-                        
-                        if obj.contrastDisksLogical == true
-                            v(a,b,n) = sqrt(var(S)) / 255;
+                            filt = radiusFilt .* angFilt;
+                            check = filt .* m;
+                            check(check == 0) = [];
+
+                            if size(check,2) < minimumPixels % Not enough pixels to continue
+                                error('Not enough pixels in region. Please change mask radii.')
+                            end
+
+                            % Apply filter across full trajectory.
+                            for n = 1:size(r,4)
+                                S = r(:,:,1,n) .* filt;
+                                S(S==0) = [];
+
+                                if isempty(S)
+                                    S = 0;
+                                end
+
+                                if obj.meanDisksLogical(1,a) == 1
+                                    q(a,b,n) = mean(S) / 255;
+                                end
+
+                                if obj.contrastDisksLogical(1,a) == 1
+                                    v(a,b,n) = sqrt(var(S)) / 255;
+                                end
+                            end
                         end
                     end
                 end

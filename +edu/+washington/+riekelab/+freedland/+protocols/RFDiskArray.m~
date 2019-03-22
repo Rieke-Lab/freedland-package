@@ -104,17 +104,14 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             end
             
             % Empirically defined limits to Stage
-            if (obj.disks > 12 && sum([obj.xSliceFrequency obj.ySliceFrequency]) == 2) ||...
-                    (obj.disks > 5 && sum([obj.xSliceFrequency obj.ySliceFrequency]) == 4) ||...
-                    (obj.disks > 3 && sum([obj.xSliceFrequency obj.ySliceFrequency]) == 6) ||...
-                    (obj.disks > 2 && sum([obj.xSliceFrequency obj.ySliceFrequency]) == 8) 
-                if obj.disks == 6 && size(obj.disksIgnoreCut,2) >= 2
-                    % Special case that works, can proceed
-                else
-                    error('Too many disks and slices. Will cause Stage to crash. Please choose a different set.')
-                end
+            if (checkDisks > 12 && sum([obj.xSliceFrequency obj.ySliceFrequency]) == 2) ||...
+                    (checkDisks > 3 && sum([obj.xSliceFrequency obj.ySliceFrequency]) == 6) ||...
+                    (checkDisks > 2 && sum([obj.xSliceFrequency obj.ySliceFrequency]) == 8)
+                error('Too many disks, will cause Stage failure')
             end
-                    
+            
+            % Addition
+            
             % Identify image
             imageIdentifier = [5 8 13 17 23 27 31 39 56 64 100];
             imageVal = imageIdentifier(obj.imageNo);

@@ -31,6 +31,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         naturalDisks = [0 0];  % starting from the center disk and moving outwards, which disks should remain a natural image?
         backgroundDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be left at background intensity?
         spatialFrequency = 100; % for contrastDisks, how many um per bar? (input from rfReverseContrastGratings) 
+        meanIntegration = 'gaussian';
+        contrastIntegration = 'uniform';
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -42,6 +44,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         trajectoryType = symphonyui.core.PropertyType('char', 'row', {'natural','disk','both'})
+        meanIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian'})
+        contrastIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian','contrast'})
         backgroundIntensity
         imageMatrix
         overrideRadiiLogical
@@ -72,7 +76,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         function prepareRun(obj)
             
             prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
-            
+
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             if strcmp(obj.trajectory,'both') % Splits the epoch into two for online analysis.
                 obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
@@ -149,17 +153,10 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             
             if ~strcmp(obj.trajectory,'natural') % Features any disk
                 
-                % Set identifiers to false
+                % Identify type of disks
                 obj.meanDisksLogical = zeros(1,obj.disks);
                 obj.contrastDisksLogical = zeros(1,obj.disks);
                 
-                % Identify corresponding RF Filter
-                [RFFilter,~,~] = calculateFilter(obj);
-
-                % Prepare trajectory with our RF Filter.
-                [traj, dist] = weightedTrajectory(obj, img2, RFFilter);
-                
-                % Determine types of masks to calculate
                 obj.meanDisks(obj.meanDisks == 0) = [];
                 obj.contrastDisks(obj.contrastDisks == 0) = [];
                 obj.meanContrastDisks(obj.meanContrastDisks == 0) = [];
@@ -169,14 +166,20 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 
                 obj.meanDisksLogical(obj.meanContrastDisks) = 1;
                 obj.contrastDisksLogical(obj.meanContrastDisks) = 1;
+                      
+                % Identify corresponding RF Filter
+                [RFFilter,~,~] = calculateFilter(obj);
+
+                % Prepare trajectory with our RF Filter.
+                [wTraj, dist, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
                 
                 tic
 
                 % Calculate different disks
                 if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
-                    [obj.linear, obj.radii, obj.contrast] = linearEquivalency(obj, traj, dist);
+                    [obj.linear, obj.radii, obj.contrast] = linearEquivalency(obj, wTraj, dist, RFFilterVH, unwTraj);
                 else
-                    [obj.linear, obj.radii, obj.theta, obj.contrast] = linearEquivalencySliced(obj, traj, dist);
+                    [obj.linear, obj.radii, obj.theta, obj.contrast] = linearEquivalencySliced(obj, wTraj, dist, RFFilterVH, unwTraj);
                 end
                 
                 toc
@@ -595,7 +598,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
         
         % Apply RF Filter over the entire trajectory.
-        function [r, m] = weightedTrajectory(obj, img, RFFilter)
+        function [r, m, u, o] = weightedTrajectory(obj, img, RFFilter)
             
             % calculate trajectory size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
@@ -618,15 +621,18 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             
             % create trajectory  
             r = zeros(size(m,1),size(m,2),1,size(obj.xTraj,2));
+            u = zeros(size(m,1),size(m,2),1,size(obj.xTraj,2));
             for a = 1:size(obj.xTraj,2)
                 % create image
-               tempImg = img(obj.yTraj(1,a)-yRange:obj.yTraj(1,a)+yRange,obj.xTraj(1,a)-xRange:obj.xTraj(1,a)+xRange); 
-               r(:,:,1,a) = tempImg .* tempFilt;
+               u(:,:,1,a) = img(obj.yTraj(1,a)-yRange:obj.yTraj(1,a)+yRange,obj.xTraj(1,a)-xRange:obj.xTraj(1,a)+xRange); 
+               r(:,:,1,a) = u(:,:,1,a) .* tempFilt;
             end
+            
+            o = tempFilt;
         end
         
         % Calculate linear equivalency without slices
-        function [q, radius, v] = linearEquivalency(obj, r, m)
+        function [q, radius, v] = linearEquivalency(obj, r, m, RFFilterVH, unwTraj)
             
             q = zeros(obj.disks,size(r,4));
             v = zeros(obj.disks,size(r,4));
@@ -644,28 +650,67 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 for a = 1:size(radius,2) - 1
                     if sum([obj.meanDisksLogical(1,a),obj.contrastDisksLogical(1,a)]) > 0 % Only regions where we absolutely need to calculate (speed increase)
                         filt = m >= radius(1,a) & m <= radius(1,a+1); % Logical mask.
-                        check = filt .* m;
+                        check = filt;
                         check(check == 0) = [];
 
                         if size(check,2) < minimumPixels % Not enough pixels to continue
                             error('Not enough pixels in region. Please change mask radii.')
                         end
+                        
+                        if strcmp(obj.meanIntegration,'gaussian')
+                            T = RFFilterVH .* filt;
+                            T(T==0) = []; % Normalize to region.
+                            R = mean(T(:)) * 255; % Mean equivalence
+                            RV = sqrt(var(T(:))) * 255; % Contrast equivalence
+                        end
 
                         % Apply filter across full trajectory.
                         for n = 1:size(r,4)
-                            S = r(:,:,1,n) .* filt;
-                            S(S==0) = [];
-
-                            if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
-                                S = 0;
-                            end
-
-                            if obj.meanDisksLogical(1,a) == 1
-                                q(a,n) = mean(S) / 255;
+                            
+                            if obj.meanDisksLogical(1,a) == 1 % Disk belongs
+                                
+                                if strcmp(obj.meanIntegration,'gaussian')
+                                    S = r(:,:,1,n) .* filt; % RF weighted trajectory
+                                    S(S==0) = [];
+                                else
+                                    S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
+                                    S(S==0) = [];
+                                end
+                                
+                                if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                    S = 0;
+                                end
+                                
+                                if strcmp(obj.meanIntegration,'gaussian')
+                                    q(a,n) = mean(S(:)) / R; % Renormalize
+                                else
+                                    q(a,n) = mean(S(:)); % Raw average
+                                end
+                                
                             end
 
                             if obj.contrastDisksLogical(1,a) == 1
-                                v(a,n) = sqrt(var(S)) / 255;
+                                
+                                if ~strcmp(obj.contrastIntegration,'gaussian') % Not gaussian (more options)
+                                    S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
+                                    S(S==0) = [];
+                                else
+                                    S = r(:,:,1,n) .* filt; % RF weighted trajectory
+                                    S(S==0) = [];
+                                end
+                                
+                                if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                    S = 0;
+                                end
+                                
+                                if strcmp(obj.contrastIntegration,'gaussian')
+                                    v(a,n) = sqrt(var(S(:))) / RV; % Renormalize
+                                elseif strcmp(obj.contrastIntegration,'contrast')
+                                    v(a,n) = sqrt(var(S(:))) / R; % Normalize to mean
+                                else
+                                    v(a,n) = sqrt(var(S(:))); % Raw contrast
+                                end
+                                
                             end
                         end
                     end
@@ -674,7 +719,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
         
         % Calculate linear equivalency with slices
-        function [q, radius, theta, v] = linearEquivalencySliced(obj, r, m)
+        function [q, radius, theta, v] = linearEquivalencySliced(obj, r, m, RFFilterVH, unwTraj)
             
             imgSize = [size(r,1) size(r,2)];
             minimumPixels = 12; % minimum amount of pixels for us to get a reasonable statistic.
@@ -730,22 +775,61 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                             if size(check,2) < minimumPixels % Not enough pixels to continue
                                 error('Not enough pixels in region. Please change mask radii.')
                             end
+                            
+                            if strcmp(obj.meanIntegration,'gaussian')
+                                T = RFFilterVH .* filt;
+                                T(T==0) = []; % Normalize to region.
+                                R = mean(T(:)) * 255; % Mean equivalence
+                                RV = sqrt(var(T(:))) * 255; % Contrast equivalence
+                            end
 
                             % Apply filter across full trajectory.
                             for n = 1:size(r,4)
-                                S = r(:,:,1,n) .* filt;
-                                S(S==0) = [];
 
-                                if isempty(S)
-                                    S = 0;
-                                end
+                                if obj.meanDisksLogical(1,a) == 1 % Disk belongs
 
-                                if obj.meanDisksLogical(1,a) == 1
-                                    q(a,b,n) = mean(S) / 255;
+                                    if strcmp(obj.meanIntegration,'gaussian')
+                                        S = r(:,:,1,n) .* filt; % RF weighted trajectory
+                                        S(S==0) = [];
+                                    else
+                                        S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
+                                        S(S==0) = [];
+                                    end
+
+                                    if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                        S = 0;
+                                    end
+
+                                    if strcmp(obj.meanIntegration,'gaussian')
+                                        q(a,b,n) = mean(S(:)) / R; % Renormalize
+                                    else
+                                        q(a,b,n) = mean(S(:)); % Raw average
+                                    end
+
                                 end
 
                                 if obj.contrastDisksLogical(1,a) == 1
-                                    v(a,b,n) = sqrt(var(S)) / 255;
+
+                                    if ~strcmp(obj.contrastIntegration,'gaussian') % Not gaussian (more options)
+                                        S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
+                                        S(S==0) = [];
+                                    else
+                                        S = r(:,:,1,n) .* filt; % RF weighted trajectory
+                                        S(S==0) = [];
+                                    end
+
+                                    if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                        S = 0;
+                                    end
+
+                                    if strcmp(obj.contrastIntegration,'gaussian')
+                                        v(a,b,n) = sqrt(var(S(:))) / RV; % Renormalize
+                                    elseif strcmp(obj.contrastIntegration,'contrast')
+                                        v(a,b,n) = sqrt(var(S(:))) / R; % Normalize to mean
+                                    else
+                                        v(a,b,n) = sqrt(var(S(:))); % Raw contrast
+                                    end
+
                                 end
                             end
                         end

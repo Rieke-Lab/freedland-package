@@ -74,7 +74,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         end
 
         function prepareRun(obj)
-            
+
             prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
@@ -684,7 +684,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 if strcmp(obj.meanIntegration,'gaussian')
                                     q(a,n) = mean(S(:)) / R; % Renormalize
                                 else
-                                    q(a,n) = mean(S(:)); % Raw average
+                                    q(a,n) = mean(S(:)) / 255; % Raw average
                                 end
                                 
                             end
@@ -708,7 +708,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 elseif strcmp(obj.contrastIntegration,'contrast')
                                     v(a,n) = sqrt(var(S(:))) / R; % Normalize to mean
                                 else
-                                    v(a,n) = sqrt(var(S(:))); % Raw contrast
+                                    v(a,n) = sqrt(var(S(:))) / 255; % Raw contrast
                                 end
                                 
                             end
@@ -803,7 +803,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                     if strcmp(obj.meanIntegration,'gaussian')
                                         q(a,b,n) = mean(S(:)) / R; % Renormalize
                                     else
-                                        q(a,b,n) = mean(S(:)); % Raw average
+                                        q(a,b,n) = mean(S(:)) / 255; % Raw average
                                     end
 
                                 end
@@ -827,7 +827,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                     elseif strcmp(obj.contrastIntegration,'contrast')
                                         v(a,b,n) = sqrt(var(S(:))) / R; % Normalize to mean
                                     else
-                                        v(a,b,n) = sqrt(var(S(:))); % Raw contrast
+                                        v(a,b,n) = sqrt(var(S(:))) / 255; % Raw contrast
                                     end
 
                                 end

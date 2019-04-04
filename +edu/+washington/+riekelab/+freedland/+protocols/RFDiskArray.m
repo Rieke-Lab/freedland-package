@@ -19,7 +19,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         
         % Disk placement
         disks = 4; % number of disks that are evenly placed over a natural image.
-        overrideRadii = [0 0]; % only takes effect if any value is >0. Allows any number of disks in any distribution (in px). For a 800px monitor, must contain 0 and 400 and can be represented as: [0 50 100 400].
+        overrideRadii = [0 0]; % only takes effect if any value is >0. Allows any number of disks in any distribution. In pixels, for a 800px monitor, must contain 0 and 400 and can be represented as: [0 50 100 400]. In RF coordinates, must contain 0 and 3, where 1, 2 are the radius of the center, surround respectively. For a [center surround] = [70 170], [0 0.5 1 1.5 2 3] in RF = [0 35 70 120 170 400] in px.
+        overrideCoordinate = 'pixels'; % type of coordinates to measure disk radii.
         xSliceFrequency = 2; % how many radial slices to cut between 0 and 90 degrees.
         ySliceFrequency = 2; % how many radial slices to cut between 90 and 180 degrees.
         disksIgnoreCut = [1 2]; % starting from the center disk and moving outwards, how many disks should we NOT cut (keep circular)?
@@ -32,11 +33,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         backgroundDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be left at background intensity?
         spatialFrequency = 100; % for contrastDisks, how many um per bar? (input from rfReverseContrastGratings) 
         meanIntegration = 'gaussian';
-        contrastIntegration = 'uniform';
+        contrastIntegration = 'gaussian';
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(5) % number of epochs to queue
+        numberOfAverages = uint16(10) % number of epochs to queue
         amp % Output amplifier
     end
     
@@ -46,6 +47,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         trajectoryType = symphonyui.core.PropertyType('char', 'row', {'natural','disk','both'})
         meanIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian'})
         contrastIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian','contrast'})
+        overrideCoordinateType = symphonyui.core.PropertyType('char', 'row', {'pixels','RF'})
         backgroundIntensity
         imageMatrix
         overrideRadiiLogical
@@ -64,6 +66,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         diskExpand
         diskOpacity
         spatialFrequencyPx
+        rfSizing
     end
 
     methods
@@ -168,11 +171,28 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 obj.contrastDisksLogical(obj.meanContrastDisks) = 1;
                       
                 % Identify corresponding RF Filter
-                [RFFilter,~,~] = calculateFilter(obj);
+                [RFFilter,~,obj.rfSizing] = calculateFilter(obj);
 
                 % Prepare trajectory with our RF Filter.
                 [wTraj, dist, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
-                
+                                
+                % For an override, convert RF units into pixels.
+                if strcmp(obj.overrideCoordinate,'RF') && obj.overrideRadiiLogical == true                   
+                    H = obj.rfSizing(2) - obj.rfSizing(1);
+                    G = max(canvasSize) / 2 - obj.rfSizing(2);
+                    for a = 1:obj.disks+1
+                        if obj.overrideRadii(1,a) <= 1
+                            obj.overrideRadii(1,a) = obj.overrideRadii(1,a) * obj.rfSizing(1);
+                        elseif obj.overrideRadii(1,a) <= 2
+                            A = obj.overrideRadii(1,a) - 1; % normalize
+                            obj.overrideRadii(1,a) = obj.rfSizing(1) + A * H;
+                        elseif obj.overrideRadii(1,a) <= 3
+                            A = obj.overrideRadii(1,a) - 2; % normalize
+                            obj.overrideRadii(1,a) = obj.rfSizing(2) + A * G;
+                        end
+                    end
+                end
+
                 tic
 
                 % Calculate different disks
@@ -274,6 +294,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('radii', obj.radii); % in pixels
+            epoch.addParameter('rfSize',obj.rfSizing); % in pixels
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -593,7 +614,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             centerRes(centerRes == 0) = [];
             
             % This parameter determines the sizing of the center/surround RF
-            f(1,1) = min(centerRes);
+            f(1,1) = min(centerRes); % in pixels
             f(1,2) = max(centerRes);
         end
         

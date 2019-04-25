@@ -3,7 +3,7 @@
 classdef rfRadialMap < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
-        stimTime = 3; % in sec. adjusts the growth rate.
+        stimTime = 3; % in sec. adjusts how quickly the oval expands radially.
         spinningFrequency = 1; % full rotations/sec. adjusts the spinning rate.
         ovalWidth = 30; % in um. fixed.
         ovalIntensity = 0.5; % light intensity of the spinning oval (0-1)

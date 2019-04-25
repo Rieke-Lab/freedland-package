@@ -354,7 +354,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             p.addController(sceneVisible);
 
             %%%%%% Apply masks %%%%%% 
-            obj.spatialFrequencyPx = obj.rig.getDevice('Stage').um2pix(obj.spatialFrequency); % Convert to pix
+            obj.spatialFrequencyPx = obj.spatialFrequency / obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'); % Convert to pix
             if ~strcmp(obj.trajectory,'natural') 
                 
                 if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
@@ -583,8 +583,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % identify screen size
 
             % Convert to pixels
-            centerSigmaPix = obj.rig.getDevice('Stage').um2pix(obj.rfSigmaCenter);
-            surroundSigmaPix = obj.rig.getDevice('Stage').um2pix(obj.rfSigmaSurround);
+            centerSigmaPix = obj.rfSigmaCenter / obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
+            surroundSigmaPix = obj.rfSigmaCenter / obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
 
             centerGaus = fspecial('gaussian',[canvasSize(2) canvasSize(1)],centerSigmaPix);
             surroundGaus = fspecial('gaussian',[canvasSize(2) canvasSize(1)],surroundSigmaPix);

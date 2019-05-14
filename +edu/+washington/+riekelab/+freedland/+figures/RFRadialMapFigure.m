@@ -129,7 +129,7 @@ classdef RFRadialMapFigure < symphonyui.core.FigureHandler
                 pullIndices = (obj.summaryData.allRadii(SpotSizeIndex) == obj.allRadii .* obj.umPerPix); 
                 obj.summaryData.meanRadiiResponses(SpotSizeIndex) = mean(obj.allResponses(pullIndices));
             end
-            obj.lineHandle(2) = line(obj.summaryData.allRadii, obj.summaryData.meanRadiiResponses,'Color','black',...
+            obj.lineHandle(2) = plot(obj.summaryData.allRadii, obj.summaryData.meanRadiiResponses,'Color','black',...
                 'Parent', obj.axesHandle(2));
             
             % To make an empirical RF, we convert to cartesian coordinates

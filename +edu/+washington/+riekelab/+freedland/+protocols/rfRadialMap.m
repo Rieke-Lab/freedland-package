@@ -3,13 +3,13 @@
 classdef rfRadialMap < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
-        stimTime = 3; % in sec. adjusts how quickly the oval expands radially.
+        stimTime = 3; % in sec. adjusts the growth rate.
         spinningFrequency = 1; % full rotations/sec. adjusts the spinning rate.
         ovalWidth = 30; % in um. fixed.
         ovalIntensity = 0.5; % light intensity of the spinning oval (0-1)
         backgroundIntensity = 0; % light intensity of background (0-1)
         onlineAnalysis = 'none'
-        numberOfAverages = uint16(5) % number of epochs to queue
+        numberOfAverages = uint16(10) % number of epochs to queue
         amp % Output amplifier
     end
 
@@ -28,6 +28,7 @@ classdef rfRadialMap < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         function prepareRun(obj)
+
             prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % identify screen size
             canvasLimit = min(canvasSize) / 2; % stop at nearest edge of monitor.

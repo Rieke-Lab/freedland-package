@@ -14,19 +14,19 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         trajectory = 'both'; % which type of stimulus to present: natural image, disk replacement, or both?        
         
         % RF field information
-        rfSigmaCenter = 60; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        rfSigmaSurround = 160; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaCenter = 70; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaSurround = 170; % (um) enter from difference of gaussians fit for overlaying receptive field.
         
         % Disk placement
-        disks = 4; % number of disks that are evenly placed over a natural image.
-        overrideRadii = [0 0]; % only takes effect if any value is >0. Allows any number of disks in any distribution. In pixels, for a 800px monitor, must contain 0 and 400 and can be represented as: [0 50 100 400]. In RF coordinates, must contain 0 and 3, where 1, 2 are the radius of the center, surround respectively. For a [center surround] = [70 170], [0 0.5 1 1.5 2 3] in RF = [0 35 70 120 170 400] in px.
-        overrideCoordinate = 'pixels'; % type of coordinates to measure disk radii.
-        xSliceFrequency = 2; % how many radial slices to cut between 0 and 90 degrees.
-        ySliceFrequency = 2; % how many radial slices to cut between 90 and 180 degrees.
-        disksIgnoreCut = [1 2]; % starting from the center disk and moving outwards, how many disks should we NOT cut (keep circular)?
+        disks = 3; % number of disks that are evenly placed over a natural image.
+        overrideRadii = [0 0.75 2 3]; % only takes effect if any value is >0. Allows any number of disks in any distribution. In pixels, for a 800px monitor, must contain 0 and 400 and can be represented as: [0 50 100 400]. In RF coordinates, must contain 0 and 3, where 1, 2 are the radius of the center, surround respectively. For a [center surround] = [70 170], [0 0.5 1 1.5 2 3] in RF = [0 35 70 120 170 400] in px.
+        overrideCoordinate = 'RF'; % type of coordinates to measure disk radii.
+        xSliceFrequency = 1; % how many radial slices to cut between 0 and 90 degrees.
+        ySliceFrequency = 1; % how many radial slices to cut between 90 and 180 degrees.
+        disksIgnoreCut = [3 0]; % starting from the center disk and moving outwards, how many disks should we NOT cut (keep circular)?
 
         % Disk type
-        meanDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be averaged?
+        meanDisks = [1 2 3]; % starting from the center disk and moving outwards, which disks should be averaged?
         contrastDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be contrasted?
         meanContrastDisks = [0 0]; % starting from the center disk and moving outwards, which disks should have both mean and contrast?
         naturalDisks = [0 0];  % starting from the center disk and moving outwards, which disks should remain a natural image?
@@ -83,7 +83,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             if strcmp(obj.trajectory,'both') % Splits the epoch into two for online analysis.
                 obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',true);
+                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',2);
             else % Keeps as a single epoch.
                 obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
                     obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);

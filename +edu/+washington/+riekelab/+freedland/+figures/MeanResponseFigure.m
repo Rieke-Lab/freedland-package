@@ -26,7 +26,7 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
             ip.addParameter('sweepColor', co(1,:), @(x)ischar(x) || ismatrix(x));
             ip.addParameter('storedSweepColor', 'r', @(x)ischar(x) || isvector(x));
             ip.addParameter('recordingType', [], @(x)ischar(x));
-            ip.addParameter('splitEpoch', false);
+            ip.addParameter('splitEpoch', 1);
             ip.parse(varargin{:});
             
             obj.device = device;
@@ -98,12 +98,18 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
                     y = sampleRate*conv(y,newFilt,'same'); %inst firing rate, Hz
                 end    
                 
-                if obj.splitEpoch == true
-                    g = floor(length(y)/2);
-                    y1 = y(1:g);
+                g = floor(length(y)/obj.splitEpoch);
+                y1 = y(1:g);
+                
+                if obj.splitEpoch > 1
                     y2 = y(g+1:2*g);
-                    x = x(1:g);
                 end
+                
+                if obj.splitEpoch > 2
+                    y3 = y(2*g+1:3*g);
+                end
+                
+                x = x(1:g);
             else
                 x = [];
                 y = [];
@@ -145,11 +151,18 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
                     warning('Not enough colors supplied for sweeps')
                 end
                 
-                if obj.splitEpoch == true
+                if obj.splitEpoch == 2
                     sweep.line = line(x, y1, 'Parent', obj.axesHandle,...
                         'Color', 'blue');
                     sweep.line2 = line(x, y2, 'Parent', obj.axesHandle,...
                         'Color', 'red');
+                elseif obj.splitEpoch == 3
+                    sweep.line = line(x, y1, 'Parent', obj.axesHandle,...
+                        'Color', 'blue');
+                    sweep.line2 = line(x, y2, 'Parent', obj.axesHandle,...
+                        'Color', 'red');
+                    sweep.line3 = line(x, y3, 'Parent', obj.axesHandle,...
+                        'Color', 'green');
                 else
                     sweep.line = line(x, y, 'Parent', obj.axesHandle,...
                         'Color', obj.sweepColor(cInd,:));
@@ -160,10 +173,16 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
             else
                 sweep = obj.sweeps{obj.sweepIndex};
                 cy = get(sweep.line, 'YData');
-                if obj.splitEpoch == true
+                if obj.splitEpoch == 2
                     cy2 = get(sweep.line2, 'YData');
                     set(sweep.line, 'YData', (cy * sweep.count + y1) / (sweep.count + 1));
                     set(sweep.line2, 'YData', (cy2 * sweep.count + y2) / (sweep.count + 1));
+                elseif  obj.splitEpoch == 3
+                    cy2 = get(sweep.line2, 'YData');
+                    cy3 = get(sweep.line3, 'YData');
+                    set(sweep.line, 'YData', (cy * sweep.count + y1) / (sweep.count + 1));
+                    set(sweep.line2, 'YData', (cy2 * sweep.count + y2) / (sweep.count + 1));
+                    set(sweep.line3, 'YData', (cy3 * sweep.count + y3) / (sweep.count + 1));
                 else
                     set(sweep.line, 'YData', (cy * sweep.count + y) / (sweep.count + 1));
                 end

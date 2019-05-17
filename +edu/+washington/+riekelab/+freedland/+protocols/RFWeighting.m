@@ -4,7 +4,7 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         preTime = 250 % ms
         stimTime = 250 % ms
         tailTime = 250 % ms
-        cellClass = 'OFF' % type of cell
+        cellClass = 'ON' % type of cell
         centerSigma = [40 50 60 65 70 75 80 85 90 95 100 110 120] % in um
         annulusSize = 100 % in um
         maximumRs = 0.8; % maximum light intensity we encounter (0-1)
@@ -142,18 +142,10 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             g = DoG./max(DoG(:)); % re-normalize filter
             b = a / max(DoG(:)); % re-normalize background intensity
             
-            % For an ON cell:
-            % We want the highest weighted RF subunits recieve little light, 
-            % lowest weighted recieve most light. We can use a complementary
-            % filter.
-            if strcmp(obj.cellClass,'ON')
+            if strcmp(obj.cellClass,'OFF')
                 g = abs(DoG-1);
                 b = 1 - b; % complementary background
             end
-            
-            % For an OFF cell:
-            % highest weighted regions recieve most light to minimize spiking
-            % can just use RF filter!
         end
    
         function tf = shouldContinuePreparingEpochs(obj)

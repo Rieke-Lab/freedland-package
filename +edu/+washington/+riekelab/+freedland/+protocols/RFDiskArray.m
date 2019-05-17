@@ -8,7 +8,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         tailTime = 250 % in ms
         
         % Natural image trajectory
-        imageNo = 1; % natural image number (1 to 11)
+        imageNo = 1; % natural image number (1 to 101)
         observerNo = 1; % observer number (1 to 19)
         amplification = 1; % amplify fixations by X. Setting to 0 produces a saccade-only trajectory. 
         trajectory = 'both'; % which type of stimulus to present: natural image, disk replacement, or both?        
@@ -121,13 +121,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                     error('Too many disks and slices. Will cause Stage to crash. Please choose a different set.')
                 end
             end
-                    
-            % Identify image
-            imageIdentifier = [5 8 13 17 23 27 31 39 56 64 100];
-            imageVal = imageIdentifier(obj.imageNo);
             
             % Pull base trajectories and image information.
-            [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(imageVal, obj.observerNo,...
+            [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.imageNo, obj.observerNo,...
                     'amplification', obj.amplification,'mirroring', true);
                 
             % Scale pixels in image to monitor

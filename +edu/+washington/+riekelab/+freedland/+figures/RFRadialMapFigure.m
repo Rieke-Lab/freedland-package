@@ -99,7 +99,7 @@ classdef RFRadialMapFigure < symphonyui.core.FigureHandler
             
             % Now spikes are associated with the spin and growth of the ellipse.
             obj.allAngles = cat(1,obj.allAngles,round(deg2rad(obj.spins),1)); % 5 deg resolution
-            obj.allRadii = cat(1,obj.allRadii,round(obj.growth,1)); % 1 px resolution
+            obj.allRadii = cat(1,obj.allRadii,round(obj.growth,-1)); % 1 px resolution
             obj.allResponses = cat(1,obj.allResponses,newEpochResponse);
 
             obj.summaryData.allAngles = unique(obj.allAngles);

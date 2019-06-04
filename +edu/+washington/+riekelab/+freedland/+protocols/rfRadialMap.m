@@ -1,6 +1,6 @@
 % Provides a spinning oval stimulus that build a radial receptive field map
 % simulatenously.
-classdef rfRadialMap < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef RFRadialMap < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
         stimTime = 3; % in sec. adjusts the growth rate.

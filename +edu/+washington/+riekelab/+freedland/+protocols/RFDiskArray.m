@@ -23,6 +23,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         overrideCoordinate = 'RF'; % type of coordinates to measure disk radii.
         xSliceFrequency = 1; % how many radial slices to cut between 0 and 90 degrees.
         ySliceFrequency = 1; % how many radial slices to cut between 90 and 180 degrees.
+        rotateSlices = 0; % degrees to rotate all slices (0 to 90).
         disksIgnoreCut = [3 0]; % starting from the center disk and moving outwards, how many disks should we NOT cut (keep circular)?
 
         % Disk type
@@ -211,6 +212,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                 k = k ./ max(k(:)) .* 90;
                 k = abs(k - 90);
                 k(1:round(canvasSize(2)/2)-1,:) = k(1:round(canvasSize(2)/2)-1,:) + 180;
+                
+                k = mod(k - obj.rotateSlices,360);
                 
                 if obj.xSliceFrequency == 0 && obj.ySliceFrequency > 0 % Special case
                     k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) = k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) + 360; % add
@@ -746,6 +749,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             k = k ./ max(k(:)) .* 90; % Convert to degrees
             k = abs(k - 90); % Rotate for proper polar coordinates
             k(1:floor(imgSize(1)/2),:) = k(1:floor(imgSize(1)/2),:) + 180;
+            
+            k = mod(k - obj.rotateSlices,360); % rotate as needed.
 
             radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
             

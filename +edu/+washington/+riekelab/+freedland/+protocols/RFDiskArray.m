@@ -8,7 +8,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         tailTime = 250 % in ms
         
         % Natural image trajectory
-        imageNo = 1; % natural image number (1 to 101)
+        imageNo = 5; % natural image number (1 to 101)
         observerNo = 1; % observer number (1 to 19)
         amplification = 1; % amplify fixations by X. Setting to 0 produces a saccade-only trajectory. 
         trajectory = 'both'; % which type of stimulus to present: natural image, disk replacement, or both?        
@@ -644,7 +644,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             u = zeros(size(m,1),size(m,2),1,size(obj.xTraj,2));
             for a = 1:size(obj.xTraj,2)
                 % create image
-               u(:,:,1,a) = img(obj.yTraj(1,a)-yRange:obj.yTraj(1,a)+yRange,obj.xTraj(1,a)-xRange:obj.xTraj(1,a)+xRange); 
+               u(:,:,1,a) = img(obj.yTraj(1,a)-yRange:obj.yTraj(1,a)+yRange-1,obj.xTraj(1,a)-xRange:obj.xTraj(1,a)+xRange-1); 
                r(:,:,1,a) = u(:,:,1,a) .* tempFilt;
             end
             

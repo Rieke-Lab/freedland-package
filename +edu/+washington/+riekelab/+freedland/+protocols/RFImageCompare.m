@@ -1,6 +1,6 @@
 % Replace a natural movie with a variety of integrated disks.
 % By J. Freedland, 2019.
-classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol
+classdef RFImageCompare < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
         preTime = 250 % in ms
@@ -8,7 +8,7 @@ classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrer
         tailTime = 250 % in ms
         
         % Natural image trajectory
-        imageNo = 1; % natural image number (1 to 101)
+        imageNo = 5; % natural image number (1 to 101)
         observerNo = 1; % observer number (1 to 19)
         amplification = 1; % amplify fixations by X. Setting to 0 produces a saccade-only trajectory. 
         trajectory = 'both'; % which type of stimulus to present: natural image, filtered image, or both?        
@@ -28,18 +28,21 @@ classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrer
         backgroundIntensity
         imageMatrix
         imageMatrix2
+        xTraj
+        yTraj
+        timeTraj
     end
 
     methods
         
         function didSetRig(obj)
-            didSetRig@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
+            didSetRig@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
             [obj.amp, obj.ampType] = obj.createDeviceNamesProperty('Amp');
         end
 
         function prepareRun(obj)
 
-            prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
+            prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             if strcmp(obj.trajectory,'both') % Splits the epoch into two for online analysis.
@@ -70,16 +73,12 @@ classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrer
             while size(imageString,2) < 3
                 imageString = strcat('0',imageString);
             end
-            if ip.Results.directory
-                filename = strcat(directory,'altimg',imageString,'.mat');
-            else
-                filename = strcat('altimg',imageString,'.mat');
-            end
 
+            filename = strcat(directory,'altimg',imageString,'.mat');
             load(filename)
             
             if strcmp(obj.filteredImage,'raw')
-                B = uint8(picture); % pre-filtered
+                B = picture; % pre-filtered
             elseif strcmp(obj.filteredImage,'complement')
                 B = img2 - picture; % relative to original image
             else
@@ -91,6 +90,7 @@ classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrer
             % Produce trajectories
             obj.xTraj = baseMovement.x + fixMovement.x;
             obj.yTraj = baseMovement.y + fixMovement.y;
+            obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % DOVES resolution
             
             % Adjust axes and units for monitor (VH Pixels)
             obj.xTraj = -(obj.xTraj - size(img,2)/2);
@@ -101,7 +101,7 @@ classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrer
         
         function prepareEpoch(obj, epoch)
             
-            prepareEpoch@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj, epoch);
+            prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             device = obj.rig.getDevice(obj.amp);
             if ~strcmp(obj.trajectory,'both')
                 duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
@@ -156,7 +156,7 @@ classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrer
             scenePosition = stage.builtin.controllers.PropertyController(scene,...
                 'position', @(state)getScenePosition(obj, state.time - obj.preTime/1e3, p0));
             scene2Position = stage.builtin.controllers.PropertyController(scene2,...
-                'position', @(state)getScenePosition(obj, state.time - cycleType - obj.preTime/1e3, p0));
+                'position', @(state)getScenePosition(obj, state.time - cycleTime - obj.preTime/1e3, p0));
             
             function p = getScenePosition(obj, time, p0)
                 if time <= 0
@@ -179,8 +179,8 @@ classdef RFImageCompare < edu.washington.riekelab.freedland.protocols.RepeatPrer
 
             sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3); % 1st
-            scene2Visible = stage.builtin.controllers.PropertyController(scene, 'visible', ... % 2nd
-                @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime + cycleTime) * 1e-3);
+            scene2Visible = stage.builtin.controllers.PropertyController(scene2, 'visible', ... % 2nd
+                @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
             p.addController(scene2Visible);
         end

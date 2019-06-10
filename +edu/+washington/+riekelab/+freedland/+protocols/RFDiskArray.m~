@@ -713,10 +713,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 
                                 if ~strcmp(obj.contrastIntegration,'gaussian') % Not gaussian (more options)
                                     S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
-                                    S(S==0) = [];
                                 else
                                     S = r(:,:,1,n) .* filt; % RF weighted trajectory
-                                    S(S==0) = [];
+
                                 end
                                 
                                 if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
@@ -804,8 +803,6 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 R = mean(T(:)) * 255; % Mean equivalence
                                 RV = sqrt(var(T(:))) * 255; % Contrast equivalence
                             end
-                            
-                            regionSize = sum(filt(:));
 
                             % Apply filter across full trajectory.
                             for n = 1:size(r,4)
@@ -814,8 +811,10 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
 
                                     if strcmp(obj.meanIntegration,'gaussian')
                                         S = r(:,:,1,n) .* filt; % RF weighted trajectory
+                                        S(S==0) = [];
                                     else
                                         S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
+                                        S(S==0) = [];
                                     end
 
                                     if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
@@ -823,9 +822,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                     end
 
                                     if strcmp(obj.meanIntegration,'gaussian')
-                                        q(a,b,n) = sum(S(:)) / (regionSize  * R); % Renormalize
+                                        q(a,b,n) = mean(S(:)) / R; % Renormalize
                                     else
-                                        q(a,b,n) = sum(S(:)) / (regionSize  * 255); % Raw average
+                                        q(a,b,n) = mean(S(:)) / 255; % Raw average
                                     end
 
                                 end

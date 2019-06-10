@@ -643,7 +643,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             % calculation doesn't.
             centering = obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in mu
             centeringPix = centering ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
-            centeredXTraj = round(obj.xTraj + centeringPix(1));
+            centeredXTraj = round(obj.xTraj - centeringPix(1));
             centeredYTraj = round(obj.yTraj + centeringPix(2));
             
             % create trajectory  

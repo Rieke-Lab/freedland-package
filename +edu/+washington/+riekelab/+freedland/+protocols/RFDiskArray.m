@@ -641,7 +641,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             
             % while the rig automatically centers the stimulus, our
             % calculation doesn't.
-            centering = obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in mu
+            centering = obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset'); % in mu
             centeringPix = centering ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
             centeredXTraj = round(obj.xTraj - centeringPix(1));
             centeredYTraj = round(obj.yTraj + centeringPix(2));
@@ -685,14 +685,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                             error('Not enough pixels in region. Please change mask radii.')
                         end
                         
+                        regionSize = sum(filt(:));
+                        
                         if strcmp(obj.meanIntegration,'gaussian')
                             T = RFFilterVH .* filt;
-                            T(T==0) = []; % Normalize to region.
-                            R = mean(T(:)) * 255; % Mean equivalence
+                            R = sum(T(:)) / regionSize * 255; % Mean equivalence
                             RV = sqrt(var(T(:))) * 255; % Contrast equivalence
                         end
-                        
-                        regionSize = sum(filt(:));
 
                         % Apply filter across full trajectory.
                         for n = 1:size(r,4)
@@ -806,14 +805,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                                 error('Not enough pixels in region. Please change mask radii.')
                             end
                             
+                            regionSize = sum(filt(:));
+                            
                             if strcmp(obj.meanIntegration,'gaussian')
                                 T = RFFilterVH .* filt;
-                                T(T==0) = []; % Normalize to region.
-                                R = mean(T(:)) * 255; % Mean equivalence
+                                R = sum(T(:)) / regionSize * 255; % Mean equivalence
                                 RV = sqrt(var(T(:))) * 255; % Contrast equivalence
                             end
-                            
-                            regionSize = sum(filt(:));
 
                             % Apply filter across full trajectory.
                             for n = 1:size(r,4)

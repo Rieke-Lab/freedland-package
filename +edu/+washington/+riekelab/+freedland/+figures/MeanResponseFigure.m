@@ -43,6 +43,14 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
             import appbox.*;
             iconDir = [fileparts(fileparts(mfilename('fullpath'))), '\+utils\+icons\'];
             toolbar = findall(obj.figureHandle, 'Type', 'uitoolbar');
+            
+            pVEButton = uipushtool( ...
+                'Parent', toolbar, ...
+                'TooltipString', 'Percent variance explained', ...
+                'Separator', 'on', ...
+                'ClickedCallback', @obj.onSelectedpVE);
+            setIconImage(pVEButton, [iconDir, 'DoG.png']);
+            
             storeSweepButton = uipushtool( ...
                 'Parent', toolbar, ...
                 'TooltipString', 'Store Sweep', ...
@@ -258,6 +266,20 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
                 end
             end
         end
+    end
+    
+    methods (Access = private)
+        
+        function onSelectedpVE(obj, ~, ~)
+            if obj.splitEpoch == 2 % must have reference
+
+                sigmaC = var(obj.sweeps.line - obj.sweeps.line2) / var(obj.sweeps.line);
+
+                str = {['percent variance explained = ',num2str(sigmaC)]};
+                title(obj.axesHandle,str);
+            end
+        end
+
     end
         
 end

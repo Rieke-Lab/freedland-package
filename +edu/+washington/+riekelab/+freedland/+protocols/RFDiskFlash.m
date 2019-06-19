@@ -1,17 +1,17 @@
-% Replace a natural movie with a variety of integrated disks.
+% Replace a natural image with a variety of integrated disks.
 % By J. Freedland, 2019.
-classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol
+classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
         preTime = 250 % in ms
-        stimTime = 5500 % in ms
+        stimTime = 500 % in ms
         tailTime = 250 % in ms
         
         % Natural image trajectory
         imageNo = 5; % natural image number (1 to 101)
-        observerNo = 1; % observer number (1 to 19)
-        amplification = 1; % amplify fixations by X. Setting to 0 produces a saccade-only trajectory. 
-        trajectory = 'both'; % which type of stimulus to present: natural image, disk replacement, or both?        
+        observerNo = 1; % observer number (1 to 19) 
+        replacementImage = 'disk array';
+        frameNumber = 0; % set to 0 to be random. otherwise, choose.
         
         % RF field information
         rfSigmaCenter = 70; % (um) enter from difference of gaussians fit for overlaying receptive field.
@@ -41,13 +41,14 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        trajectoryType = symphonyui.core.PropertyType('char', 'row', {'natural','disk','both'})
         meanIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian'})
         overrideCoordinateType = symphonyui.core.PropertyType('char', 'row', {'pixels','RF'})
+        replacementImageType = symphonyui.core.PropertyType('char', 'row', {'disk array','null array'})
         backgroundIntensity
         overrideRadiiLogical
         meanDisksLogical
-        movieMatrix
+        imageMatrix
+        imageMatrix2
         xTraj
         yTraj
         timeTraj
@@ -64,32 +65,22 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
     methods
         
         function didSetRig(obj)
-            didSetRig@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
+            didSetRig@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
             [obj.amp, obj.ampType] = obj.createDeviceNamesProperty('Amp');
         end
 
         function prepareRun(obj)
 
-            prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
+            prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
-            if strcmp(obj.trajectory,'both') % Splits the epoch into two for online analysis.
-                obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',2);
-            else % Keeps as a single epoch.
-                obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
-            end
+            obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
+                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',2); 
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
-            % Catch common errors        
-            if ~strcmp(obj.trajectory,'natural') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
-                error('Must have prerender set') % Pre-render required, else trajectory lags and isn't accurate
-            end
-            
             checkDisks = sum(1:obj.disks);
-            checkAssignments = sum([obj.meanDisks obj.contrastDisks obj.meanContrastDisks obj.naturalDisks obj.backgroundDisks]);
+            checkAssignments = sum([obj.meanDisks obj.naturalDisks obj.backgroundDisks]);
             if sum(obj.overrideRadii) > 0
                 obj.overrideRadiiLogical = true; % Identifier for later on
                 checkDisks = sum(1:size(obj.overrideRadii,2)-1);
@@ -102,21 +93,9 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
                 error('Two disk types have been assigned to one location.')
             end
             
-            % Empirically defined limits to Stage
-            if (obj.disks > 12 && sum([obj.xSliceFrequency obj.ySliceFrequency]) >= 2) ||...
-                    (obj.disks > 5 && sum([obj.xSliceFrequency obj.ySliceFrequency]) >= 4) ||...
-                    (obj.disks > 3 && sum([obj.xSliceFrequency obj.ySliceFrequency]) >= 6) ||...
-                    (obj.disks > 2 && sum([obj.xSliceFrequency obj.ySliceFrequency]) >= 8) 
-                if obj.disks == 6 && size(obj.disksIgnoreCut,2) >= 2
-                    % Special case that works, can proceed
-                else
-                    error('Too many disks and slices. Will cause Stage to crash. Please choose a different set.')
-                end
-            end
-            
             % Pull base trajectories and image information.
             [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.imageNo, obj.observerNo,...
-                    'amplification', obj.amplification,'mirroring', true);
+                    'amplification', 1,'mirroring', true);
                 
             % Scale pixels in image to monitor
             img = pictureInformation.image;
@@ -128,62 +107,54 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
             obj.xTraj = baseMovement.x + fixMovement.x;
             obj.yTraj = baseMovement.y + fixMovement.y;
             
-            % We do not need to consider the entire trajectory, however.
-            frames = round((obj.stimTime + 50) / 1000 * 200); % max # of frames in DOVES database, with 50ms cushion
-            if size(obj.xTraj,2) <= frames
-                frames = size(obj.xTraj,2);
+            % Choose random frame
+            if obj.frameNumber == 0
+                obj.frameNumber = randperm(length(obj.xTraj));
+                obj.frameNumber = obj.frameNumber(1);
             end
             
-            % This enables a faster computation time for shorter stimTimes
-            obj.xTraj = obj.xTraj(1,1:frames);
-            obj.yTraj = obj.yTraj(1,1:frames);
-            obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % DOVES resolution
+            obj.xTraj = obj.xTraj(1,obj.frameNumber);
+            obj.yTraj = obj.yTraj(1,obj.frameNumber);
 
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % Calculate screen size
-            
-            if ~strcmp(obj.trajectory,'natural') % Features any disk
-                
-                % Identify type of disks
-                obj.meanDisksLogical = zeros(1,obj.disks);                
-                obj.meanDisks(obj.meanDisks == 0) = [];
-                obj.meanDisksLogical(obj.meanDisks) = 1;
-                      
-                % Identify corresponding RF Filter
-                [RFFilter,~,obj.rfSizing] = calculateFilter(obj);
+             
+            % Identify type of disks
+            obj.meanDisksLogical = zeros(1,obj.disks);                
+            obj.meanDisks(obj.meanDisks == 0) = [];
+            obj.meanDisksLogical(obj.meanDisks) = 1;
 
-                % Prepare trajectory with our RF Filter.
-                [wTraj, dist, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
-                                
-                % For an override, convert RF units into pixels.
-                if strcmp(obj.overrideCoordinate,'RF') && obj.overrideRadiiLogical == true                   
-                    H = obj.rfSizing(2) - obj.rfSizing(1);
-                    G = max(canvasSize) / 2 - obj.rfSizing(2);
-                    for a = 1:obj.disks+1
-                        if obj.overrideRadii(1,a) <= 1
-                            obj.overrideRadii(1,a) = obj.overrideRadii(1,a) * obj.rfSizing(1);
-                        elseif obj.overrideRadii(1,a) <= 2
-                            A = obj.overrideRadii(1,a) - 1; % normalize
-                            obj.overrideRadii(1,a) = obj.rfSizing(1) + A * H;
-                        elseif obj.overrideRadii(1,a) <= 3
-                            A = obj.overrideRadii(1,a) - 2; % normalize
-                            obj.overrideRadii(1,a) = obj.rfSizing(2) + A * G;
-                        end
+            % Identify corresponding RF Filter
+            [RFFilter,~,obj.rfSizing] = calculateFilter(obj);
+
+            % Prepare trajectory with our RF Filter.
+            [wTraj, dist, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
+
+            % For an override, convert RF units into pixels.
+            if strcmp(obj.overrideCoordinate,'RF') && obj.overrideRadiiLogical == true                   
+                H = obj.rfSizing(2) - obj.rfSizing(1);
+                G = max(canvasSize) / 2 - obj.rfSizing(2);
+                for a = 1:obj.disks+1
+                    if obj.overrideRadii(1,a) <= 1
+                        obj.overrideRadii(1,a) = obj.overrideRadii(1,a) * obj.rfSizing(1);
+                    elseif obj.overrideRadii(1,a) <= 2
+                        A = obj.overrideRadii(1,a) - 1; % normalize
+                        obj.overrideRadii(1,a) = obj.rfSizing(1) + A * H;
+                    elseif obj.overrideRadii(1,a) <= 3
+                        A = obj.overrideRadii(1,a) - 2; % normalize
+                        obj.overrideRadii(1,a) = obj.rfSizing(2) + A * G;
                     end
                 end
-
-                tic
-
-                % Calculate different disks
-                if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
-                    movieOutput = linearEquivalencyProjectionMovie(obj, wTraj, dist, RFFilterVH, unwTraj);
-                else
-                    movieOutput = linearEquivalencySlicedProjectionMovie(obj, wTraj, dist, RFFilterVH, unwTraj);
-                end
-                
-                toc
-                
-                obj.movieMatrix = uint8(cat(4,unwTraj,movieOutput));
             end
+
+            % Calculate different disks
+            if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
+                [diskArray,nullArray] = createImage(obj, wTraj, dist, RFFilterVH, unwTraj);
+            else
+                [diskArray,nullArray] = createSlicedImage(obj, wTraj, dist, RFFilterVH, unwTraj);
+            end
+
+            obj.imageMatrix = uint8(diskArray);
+            obj.imageMatrix2 = uint8(nullArray);
             
             % There may be leaky pixels around the edge that could make
             % comparisons difficult. So, we build an mask to keep comparison controlled.
@@ -195,29 +166,20 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
                 round(canvasSize(1) - ceil(canvasSize(1)/2)) + 1 : round(canvasSize(1) + ceil(canvasSize(1)/2)) - 1) = 1;
             protectiveMask = abs(protectiveMask - 1);
             obj.surroundMask = obj.surroundMask + protectiveMask; 
-            
-            % Adjust axes and units for monitor (VH Pixels)
-            obj.xTraj = -(obj.xTraj - size(img,2)/2);
-            obj.yTraj = (obj.yTraj - size(img,1)/2);
-            obj.xTraj = obj.xTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
-            obj.yTraj = obj.yTraj .* 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
         end
         
         function prepareEpoch(obj, epoch)
             
-            prepareEpoch@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj, epoch);
+            prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             device = obj.rig.getDevice(obj.amp);
-            if ~strcmp(obj.trajectory,'both')
-                duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
-            else
-                duration = 2 * (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
-            end
+            duration = 2 * (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('radii', obj.radii); % in pixels
             epoch.addParameter('rfSize',obj.rfSizing); % in pixels
+            epoch.addParameter('frameNumber',obj.frameNumber); % in pixels
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -228,36 +190,40 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
         
         function p = createPresentation(obj)
             
-            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-                                    
-            if ~strcmp(obj.trajectory,'both')
-                p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
-            else % Present both stimuli in succession
-                p = stage.core.Presentation(2 * (obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
-            end
+            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();             
+            p = stage.core.Presentation(2 * (obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
 
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity);
             
             % Prep to display image
-            scene = stage.builtin.stimuli.Movie(obj.movieMatrix);
-            scene.size = [size(obj.movieMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
+            scene1 = stage.builtin.stimuli.Image(obj.imageMatrix);
+            scene2 = stage.builtin.stimuli.Image(obj.imageMatrix2);
+            scene1.size = [size(obj.movieMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
                 size(obj.movieMatrix,1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
+            scene2.size = scene1.size;
             p0 = canvasSize/2;
-            scene.position = p0;
+            scene1.position = p0;
+            scene2.position = p0;
             
             % Use linear interpolation when scaling the image
-            scene.setMinFunction(GL.LINEAR);
-            scene.setMagFunction(GL.LINEAR);
+            scene1.setMinFunction(GL.LINEAR);
+            scene1.setMagFunction(GL.LINEAR);
+            scene2.setMinFunction(GL.LINEAR);
+            scene2.setMagFunction(GL.LINEAR);
+            
+            p.addStimulus(scene1);
+            p.addStimulus(scene2);
             
             % Apply eye trajectories to move image around.
             cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
-            
-            p.addStimulus(scene);
 
-            sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
-                @(state)rem(state.time,cycleTime) >= obj.preTime * 1e-3 && rem(state.time,cycleTime) < (obj.preTime + obj.stimTime) * 1e-3);
-            p.addController(sceneVisible);
+            scene1Visible = stage.builtin.controllers.PropertyController(scene1, 'visible', ...
+                @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
+            scene2Visible = stage.builtin.controllers.PropertyController(scene2, 'visible', ...
+                @(state)state.time-cycleTime >= obj.preTime * 1e-3 && state.time-cycleTime < (obj.preTime + obj.stimTime) * 1e-3);
+            p.addController(scene1Visible);
+            p.addController(scene2Visible);
             
             % Apply far-surround mask
             surround = stage.builtin.stimuli.Rectangle();
@@ -340,24 +306,21 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
             centeredXTraj = round(obj.xTraj - centeringPix(1));
             centeredYTraj = round(obj.yTraj + centeringPix(2));
             
-            % create trajectory  
-            r = zeros(size(m,1),size(m,2),1,size(obj.xTraj,2));
-            u = zeros(size(m,1),size(m,2),1,size(obj.xTraj,2));
-            for a = 1:size(obj.xTraj,2)
-                % create image
-               u(:,:,1,a) = img(centeredYTraj(1,a)-yRange:centeredYTraj(1,a)+yRange-1,...
-                   centeredXTraj(1,a)-xRange:centeredXTraj(1,a)+xRange-1); 
-               r(:,:,1,a) = u(:,:,1,a) .* tempFilt;
-            end
+            % create image
+            u = img(centeredYTraj-yRange:centeredYTraj+yRange-1,...
+                centeredXTraj-xRange:centeredXTraj+xRange-1); 
+            r = u .* tempFilt;
             
             o = tempFilt;
         end
         
         % Calculate linear equivalency without slices
-        function outputMovie = linearEquivalencyProjectionMovie(obj, r, m, RFFilterVH, unwTraj)
+        function [diskArray,nullArray] = createImage(obj, r, m, RFFilterVH, unwTraj)
             
-            outputMovie = unwTraj; % typical trajectory
-            imgSize = [size(r,1) size(r,2)];
+            diskArray = zeros(size(r));
+            nullArray = unwTraj;
+            
+            imgSize = size(r);
             minimumPixels = 12; % minimum amount of pixels for us to get a reasonable statistic.
 
             radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
@@ -386,30 +349,28 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
                             R = sum(T(:)) / regionSize * 255; % Mean equivalence
                         end
 
-                        % Apply filter across full trajectory.
-                        for n = 1:size(r,4)
-                            
-                            if obj.meanDisksLogical(1,a) == 1 % Disk belongs
-                                
-                                if strcmp(obj.meanIntegration,'gaussian')
-                                    S = r(:,:,1,n) .* filt; % RF weighted trajectory
-                                else
-                                    S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
-                                end
-                                
-                                if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
-                                    S = 0;
-                                end
-                                
-                                if strcmp(obj.meanIntegration,'gaussian')
-                                    equivalency = sum(S(:)) / (regionSize  * R); % Renormalize
-                                else
-                                    equivalency = sum(S(:)) / (regionSize * 255); % Raw average
-                                end
-                                
-                                deltaDisk = (equivalency - (obj.backgroundIntensity * 255)) .* filt; % change relative to global mean
-                                outputMovie(:,:,1,n) = outputMovie(:,:,1,n) + deltaDisk; % add filter
+                        % Apply filter  
+                        if obj.meanDisksLogical(1,a) == 1 % Disk belongs
+
+                            if strcmp(obj.meanIntegration,'gaussian')
+                                S = r .* filt; % RF weighted trajectory
+                            else
+                                S = unwTraj .* filt; % Unweighted trajectory
                             end
+
+                            if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                S = 0;
+                            end
+
+                            if strcmp(obj.meanIntegration,'gaussian')
+                                equivalency = sum(S(:)) / (regionSize  * R); % Renormalize
+                            else
+                                equivalency = sum(S(:)) / (regionSize * 255); % Raw average
+                            end
+                            
+                            diskArray = outputImage + equivalency .* filt;
+                            deltaDisk = (equivalency - (obj.backgroundIntensity * 255)) .* filt; % change relative to global mean
+                            nullArray = nullArray + deltaDisk; % add filter
                         end
                     end
                 end
@@ -417,10 +378,12 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
         end
         
         % Calculate linear equivalency with slices
-        function outputMovie = linearEquivalencySlicedProjectionMovie(obj, r, m, RFFilterVH, unwTraj)
+        function [diskArray,nullArray] = createSlicedImage(obj, r, m, RFFilterVH, unwTraj)
             
-            outputMovie = unwTraj; % typical trajectory
-            imgSize = [size(r,1) size(r,2)];
+            diskArray = zeros(size(r));
+            nullArray = unwTraj;
+            
+            imgSize = size(r);
             minimumPixels = 12; % minimum amount of pixels for us to get a reasonable statistic.
             
             [xx,yy] = meshgrid(1:imgSize(2),1:imgSize(1));
@@ -458,12 +421,16 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
                 % Calculate statistics
                 for a = 1:size(radius,2) - 1
                     for b = 1:size(theta,2) - 1
+                        skipDisk = 0;
                         if obj.meanDisksLogical(1,a) > 0 % Only regions where we absolutely need to calculate (speed increase)
                             radiusFilt = m >= radius(1,a) & m <= radius(1,a+1); % Radial filter (r)
                             angFilt = k >= theta(1,b) & k <= theta(1,b+1); % Angular filter (theta)
 
                             if ismember(a,obj.disksIgnoreCut) % Ignore angular filter
                                 angFilt = ones(size(angFilt));
+                                if b > 1
+                                    skipDisk = 1;
+                                end
                             end  
 
                             filt = radiusFilt .* angFilt;
@@ -482,29 +449,28 @@ classdef RFDiskArrayProjection < edu.washington.riekelab.freedland.protocols.Rep
                             end
 
                             % Apply filter across full trajectory.
-                            for n = 1:size(r,4)
+                            if obj.meanDisksLogical(1,a) == 1 % Disk belongs
 
-                                if obj.meanDisksLogical(1,a) == 1 % Disk belongs
+                                if strcmp(obj.meanIntegration,'gaussian')
+                                    S = r .* filt; % RF weighted trajectory
+                                else
+                                    S = unwTraj .* filt; % Unweighted trajectory
+                                end
 
-                                    if strcmp(obj.meanIntegration,'gaussian')
-                                        S = r(:,:,1,n) .* filt; % RF weighted trajectory
-                                    else
-                                        S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
-                                    end
+                                if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                    S = 0;
+                                end
 
-                                    if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
-                                        S = 0;
-                                    end
+                                if strcmp(obj.meanIntegration,'gaussian')
+                                    equivalency = sum(S(:)) / (regionSize  * R); % Renormalize
+                                else
+                                    equivalency = sum(S(:)) / (regionSize  * 255); % Raw average
+                                end
 
-                                    if strcmp(obj.meanIntegration,'gaussian')
-                                        equivalency = sum(S(:)) / (regionSize  * R); % Renormalize
-                                    else
-                                        equivalency = sum(S(:)) / (regionSize  * 255); % Raw average
-                                    end
-                                    
+                                if skipDisk == 0
+                                    diskArray = outputImage + equivalency .* filt;
                                     deltaDisk = (equivalency - (obj.backgroundIntensity * 255)) .* filt; % change relative to global mean
-                                    outputMovie(:,:,1,n) = outputMovie(:,:,1,n) + deltaDisk; % add filter
-
+                                    nullArray = nullArray + deltaDisk; % add filter
                                 end
 
                             end

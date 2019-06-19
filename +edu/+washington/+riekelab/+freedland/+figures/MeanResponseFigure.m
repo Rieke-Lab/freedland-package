@@ -273,9 +273,13 @@ classdef MeanResponseFigure < symphonyui.core.FigureHandler
         function onSelectedpVE(obj, ~, ~)
             if obj.splitEpoch == 2 % must have reference
 
-                sigmaC = var(obj.sweeps.line - obj.sweeps.line2) / var(obj.sweeps.line);
+                sigmaC = var(obj.sweeps{1,1}.line.YData - obj.sweeps{1,1}.line2.YData) / var(obj.sweeps{1,1}.line.YData);
 
-                str = {['percent variance explained = ',num2str(sigmaC)]};
+                if sigmaC > 1
+                    sigmaC = 1; % prevent from producing negative value.
+                end
+                
+                str = {['percent variance explained = ', num2str((1-sigmaC)*100),'%']};
                 title(obj.axesHandle,str);
             end
         end

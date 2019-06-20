@@ -11,7 +11,7 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         imageNo = 5; % natural image number (1 to 101)
         observerNo = 1; % observer number (1 to 19) 
         replacementImage = 'disk array';
-        frameNumber = 0; % set to 0 to be random. otherwise, choose.
+        frameNumber = 0; % specific frame in a eye movement trajectory. set to zero to be random.
         
         % RF field information
         rfSigmaCenter = 70; % (um) enter from difference of gaussians fit for overlaying receptive field.
@@ -60,6 +60,7 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         diskOpacity
         spatialFrequencyPx
         rfSizing
+        radii
     end
 
     methods
@@ -148,19 +149,23 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             % Calculate different disks
             if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
-                [diskArray,nullArray] = createImage(obj, wTraj, dist, RFFilterVH, unwTraj);
+                [diskArray,nullArray,obj.radii] = createImage(obj, wTraj, dist, RFFilterVH, unwTraj);
             else
-                [diskArray,nullArray] = createSlicedImage(obj, wTraj, dist, RFFilterVH, unwTraj);
+                [diskArray,nullArray,obj.radii] = createSlicedImage(obj, wTraj, dist, RFFilterVH, unwTraj);
             end
 
-            obj.imageMatrix = uint8(diskArray);
-            obj.imageMatrix2 = uint8(nullArray);
+            obj.imageMatrix = uint8(unwTraj);
+            if strcmp(obj.replacementImage,'disk array')
+                obj.imageMatrix2 = uint8(diskArray .* 255);
+            elseif strcmp(obj.replacementImage,'null array')
+                obj.imageMatrix2 = uint8(nullArray);
+            end
             
             % There may be leaky pixels around the edge that could make
             % comparisons difficult. So, we build an mask to keep comparison controlled.
             [xx, yy] = meshgrid(1:2*canvasSize(1),1:2*canvasSize(2));
             m = sqrt((xx-canvasSize(1)).^2+(yy-canvasSize(2)).^2);
-            obj.surroundMask = m >= (max(obj.radii).*(1-obj.diskExpand/100));
+            obj.surroundMask = m >= max(canvasSize) / 2;
             protectiveMask = zeros(2*canvasSize(2),2*canvasSize(1));
             protectiveMask(round(canvasSize(2) - ceil(canvasSize(2)/2) + 1) : round(canvasSize(2) + ceil(canvasSize(2)/2) - 1), ...
                 round(canvasSize(1) - ceil(canvasSize(1)/2)) + 1 : round(canvasSize(1) + ceil(canvasSize(1)/2)) - 1) = 1;
@@ -199,8 +204,8 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Prep to display image
             scene1 = stage.builtin.stimuli.Image(obj.imageMatrix);
             scene2 = stage.builtin.stimuli.Image(obj.imageMatrix2);
-            scene1.size = [size(obj.movieMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
-                size(obj.movieMatrix,1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
+            scene1.size = [size(obj.imageMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
+                size(obj.imageMatrix,1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
             scene2.size = scene1.size;
             p0 = canvasSize/2;
             scene1.position = p0;
@@ -315,9 +320,10 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         % Calculate linear equivalency without slices
-        function [diskArray,nullArray] = createImage(obj, r, m, RFFilterVH, unwTraj)
+        function [diskArray,nullArray,radius] = createImage(obj, r, m, RFFilterVH, unwTraj)
             
             diskArray = zeros(size(r));
+            overfill = zeros(size(r));
             nullArray = unwTraj;
             
             imgSize = size(r);
@@ -334,6 +340,7 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 for a = 1:size(radius,2) - 1
                     if obj.meanDisksLogical(1,a) > 0 % Only regions where we absolutely need to calculate (speed increase)
                         filt = m >= radius(1,a) & m <= radius(1,a+1); % Logical mask.
+                        overfill = overfill + filt; % check for overfilling of regions
                         
                         % check enough pixels fill the space
                         check = filt;
@@ -368,19 +375,28 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                                 equivalency = sum(S(:)) / (regionSize * 255); % Raw average
                             end
                             
-                            diskArray = outputImage + equivalency .* filt;
+                            diskArray = diskArray + equivalency .* filt;
                             deltaDisk = (equivalency - (obj.backgroundIntensity * 255)) .* filt; % change relative to global mean
-                            nullArray = nullArray + deltaDisk; % add filter
+                            nullArray = nullArray - deltaDisk; % add filter
                         end
                     end
                 end
             end
+            
+            overfill = double(overfill == 1); % ignore regions with overfilling
+            diskArray = diskArray .* overfill;
+            nullArray = nullArray .* overfill;
+            
+            readjustFilling = abs(overfill - 1) .* obj.backgroundIntensity;
+            diskArray = diskArray + readjustFilling; % set to mean
+            nullArray = nullArray + readjustFilling .* 255; % set to mean
         end
         
         % Calculate linear equivalency with slices
-        function [diskArray,nullArray] = createSlicedImage(obj, r, m, RFFilterVH, unwTraj)
+        function [diskArray,nullArray,radius] = createSlicedImage(obj, r, m, RFFilterVH, unwTraj)
             
             diskArray = zeros(size(r));
+            overfill = zeros(size(r));
             nullArray = unwTraj;
             
             imgSize = size(r);
@@ -391,6 +407,7 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             k = k ./ max(k(:)) .* 90; % Convert to degrees
             k = abs(k - 90); % Rotate for proper polar coordinates
             k(1:floor(imgSize(1)/2),:) = k(1:floor(imgSize(1)/2),:) + 180;
+            k(imgSize(1)/2,1:imgSize(2)/2) = 180; % adjust
             
             k = mod(k - obj.rotateSlices,360); % rotate as needed.
 
@@ -468,9 +485,10 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                                 end
 
                                 if skipDisk == 0
-                                    diskArray = outputImage + equivalency .* filt;
-                                    deltaDisk = (equivalency - (obj.backgroundIntensity * 255)) .* filt; % change relative to global mean
-                                    nullArray = nullArray + deltaDisk; % add filter
+                                    overfill = overfill + filt;
+                                    diskArray = diskArray + equivalency .* filt;
+                                    deltaDisk = (equivalency - obj.backgroundIntensity) * 255 .* filt; % change relative to global mean
+                                    nullArray = nullArray - deltaDisk; % add filter
                                 end
 
                             end
@@ -478,6 +496,15 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     end
                 end
             end
+            
+            % There are gaps in our image
+            overfill = double(overfill == 1); % ignore regions with overfilling
+            diskArray = diskArray .* overfill;
+            nullArray = nullArray .* overfill;
+
+            readjustFilling = abs(overfill - 1) .* obj.backgroundIntensity;
+            diskArray = diskArray + readjustFilling; % set to mean
+            nullArray = nullArray + readjustFilling .* 255; % set to mean
         end
         
         function tf = shouldContinuePreparingEpochs(obj)

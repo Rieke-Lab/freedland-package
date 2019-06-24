@@ -13,7 +13,7 @@ classdef RFDiskEquivalency < edu.washington.riekelab.protocols.RiekeLabStageProt
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(10) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     
@@ -37,7 +37,7 @@ classdef RFDiskEquivalency < edu.washington.riekelab.protocols.RiekeLabStageProt
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',2); 
+                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis); 
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
@@ -67,8 +67,7 @@ classdef RFDiskEquivalency < edu.washington.riekelab.protocols.RiekeLabStageProt
 
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity);
-            directory = '+edu/+washington/+riekelab/+freedland/';
-            moviesDir = fullfile(fileparts(mfilename(directory)), 'Movies');
+            moviesDir = fullfile(fileparts(mfilename('fullpath')), 'movies');
             
             imageString = num2str(obj.imageNo);
             while size(imageString,2) < 3
@@ -76,22 +75,23 @@ classdef RFDiskEquivalency < edu.washington.riekelab.protocols.RiekeLabStageProt
             end
             
             if obj.tracker == 0
-                filename = strcat(directory,'img',imageString,'.mov'); % original trajectory
+                filename = strcat('img',imageString,'.mov'); % original trajectory
             else
-                filename = strcat(directory,'img',imageString,'R.mov'); % alternative trajectory
+                filename = strcat('img',imageString,'R.mov'); % alternative trajectory
             end
 
             % original trajectory
             scene = stage.builtin.stimuli.Movie(fullfile(moviesDir, filename));
-            scene.size = [size(obj.imageMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
-                size(obj.imageMatrix,1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
+            scene.size = [canvasSize(2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
+                canvasSize(1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
+%             scene.size = canvasSize;
             p0 = canvasSize/2;
             scene.position = p0;
 
             % settings for movies
             scene.setMinFunction(GL.LINEAR);
             scene.setMagFunction(GL.LINEAR);
-            scene.setPlaybackSpeed = obj.playbackSpeedVal;
+            scene.setPlaybackSpeed(obj.playbackSpeedVal);
             scene.setWrapModeS(GL.MIRRORED_REPEAT);
             scene.setWrapModeT(GL.MIRRORED_REPEAT);
             
@@ -102,6 +102,7 @@ classdef RFDiskEquivalency < edu.washington.riekelab.protocols.RiekeLabStageProt
             p.addController(sceneVisible);
             
             obj.tracker = mod(obj.tracker + 1,2);
+            keyboard
         end
 
         function tf = shouldContinuePreparingEpochs(obj)

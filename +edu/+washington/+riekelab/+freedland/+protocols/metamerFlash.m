@@ -10,8 +10,8 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         % Natural image trajectory
         referenceImageNo = 5;    % natural image number (1 to 101)
         referenceFrameNumber = 0;% specific frame in a eye movement trajectory. set to zero to be random.
-        numberMetamers = 2;      % number of metamers to view
-        numberAntiMetamers = 2;  % number of anti-metamers to view
+        numberMetamers = 2;      % number of metamers to view (up to 100)
+        numberAntiMetamers = 2;  % number of anti-metamers to view (up to 100)
         numberRandom = 1;        % number of random images to view
         randomizeTrials = true;  % whether to randomize presentations
         
@@ -45,7 +45,7 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',2); 
+                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis); 
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
@@ -55,24 +55,32 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % adjust reference frame if needed.
             if obj.referenceFrameNumber == 0
-                obj.referenceFrameNumber = randperm(1000);
-                obj.referenceFrameNumber = obj.frameNumber(1);
+                temp = randperm(1017);
+                obj.referenceFrameNumber = temp(1);
             end
             
             % from analysis file, pull relevant frame and image information
-            A = totalBest{obj.frameNumber, obj.referenceImageNo};
-            B = totalWorst{obj.frameNumber, obj.referenceImageNo};
+            A = totalBest{obj.referenceFrameNumber, obj.referenceImageNo};
+            B = totalWorst{obj.referenceFrameNumber, obj.referenceImageNo};
             
+            % ensure trajectories are equivalent
+            sensitiveA = A(:,3);
+            sensitiveB = B(:,3);
+            A(sensitiveA > 1017,:) = [];
+            B(sensitiveB > 1017,:) = [];
+            quartile = round(size(B,1)*0.70); % take from the 70th quartile, adds variability to sampling
+
             % arrange
             metamerInfo = A(1:obj.numberMetamers,2:3); % sorted from best to least best
-            antiMetamerInfo = B(end-(obj.numberAntiMetamers-1):end,2:3); % sorted from worst to least worst
+            antiMetamerInfo = B(quartile-(obj.numberAntiMetamers-1):quartile,2:3); % sorted from worst to least worst
             a = randperm(101); % images
             b = randperm(1000); % frames
             randomImgInfo = [a(1:obj.numberRandom)' b(1:obj.numberRandom)'];
+            obj.backgroundIntensity = 0;
             
             % produce alternative images
             [obj.imageMatrices, obj.infoTracker, obj.typeTracker] = produceImage(obj,metamerInfo,antiMetamerInfo,randomImgInfo);
-            
+
             if obj.randomizeTrials == true
                 obj.trialOrder = randperm(size(obj.imageMatrices,3));
             else
@@ -114,13 +122,14 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             p.setBackgroundColor(obj.backgroundIntensity);
             
             % Prep to display image
-            scene = stage.builtin.stimuli.Image(obj.imageMatrix(:,:,individualStim));
+            imageMatrix = uint8(obj.imageMatrices(:,:,individualStim));
+            scene = stage.builtin.stimuli.Image(imageMatrix);
             
             % Use linear interpolation when scaling the image
             scene.setMinFunction(GL.LINEAR);
             scene.setMagFunction(GL.LINEAR);
-            scene.size = [size(obj.imageMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
-                size(obj.imageMatrix,1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
+            scene.size = [size(imageMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
+                size(imageMatrix,1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
             p0 = canvasSize/2;
             scene.position = p0;
             
@@ -130,29 +139,27 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
             
-            obj.counter = mod(obj.counter,length(obj.trialOrder)+1) + 1;
-            
+            obj.counter = mod(obj.counter,length(obj.trialOrder)) + 1;
         end
         
         function [outputImages, imageInfo, types] = produceImage(obj,metamers,antiMetamers,randomImgInfo)
-            
             imageNumbs = [obj.referenceImageNo; metamers(:,1); antiMetamers(:,1); randomImgInfo(:,1)];
             frameNumbs = [obj.referenceFrameNumber; metamers(:,2); antiMetamers(:,2); randomImgInfo(:,2)];
             imageInfo = [imageNumbs frameNumbs];
             types = cell(size(imageNumbs));
             types{1} = 'original';
             
-            for a = 2:size(metamers,1)
-                types{a} = 'metamers';
+            for a = 2:size(metamers,1)+1
+                types{a} = 'metamer';
             end
             
-            baseline = size(metamers,1)+1;
+            baseline = size(metamers,1)+2;
             
             for a = baseline:baseline+size(antiMetamers,1)
-                types{a} = 'anti-metamers';
+                types{a} = 'anti-metamer';
             end
             
-            baseline = size(metamers,1)+size(antiMetamers,1)+1;
+            baseline = size(metamers,1)+size(antiMetamers,1)+2;
             
             for a = baseline:baseline+size(randomImgInfo,1)
                 types{a} = 'random';
@@ -171,13 +178,12 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 imageVal = imageNumbs(a,1);
                 frameVal = frameNumbs(a,1);
                 [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(imageVal, 1,...
-                        'amplification', 1,'mirroring', true);
-                    
+                        'amplification', 1,'mirroring', true); 
                 img = pictureInformation.image;
                 img = img./max(img(:)) .* 255;
                 
                 if a == 1
-                    obj.backgroundIntensity = mean(img(:));
+                    obj.backgroundIntensity = mean(img(:)) / 255;
                 end
                 
                 xTraj = baseMovement.x(frameVal) + fixMovement.x(frameVal);

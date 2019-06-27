@@ -14,6 +14,9 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         numberAntiMetamers = 2;  % number of anti-metamers to view (up to 100)
         numberRandom = 1;        % number of random images to view
         randomizeTrials = true;  % whether to randomize presentations
+        metamerPercentile = 100; % sample from what percentile of matching images (100 = best, 1 = worst)
+        antiMetamerPercentile = 80; % sample from what percentile of anti-matching images (100 = best anti-metamer, 1 = worst anti-metamer)
+        
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -68,11 +71,12 @@ classdef metamerFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             sensitiveB = B(:,3);
             A(sensitiveA > 1017,:) = [];
             B(sensitiveB > 1017,:) = [];
-            quartile = round(size(B,1)*0.70); % take from the 70th quartile, adds variability to sampling
+            metamerQuartile = size(A,1) - round(size(A,1)*obj.metamerPercentile/100); % take from the 70th quartile, adds variability to sampling
+            antiMetamerQuartile = round(size(B,1)*obj.antiMetamerPercentile/100); % take from the 70th quartile, adds variability to sampling
 
             % arrange
-            metamerInfo = A(1:obj.numberMetamers,2:3); % sorted from best to least best
-            antiMetamerInfo = B(quartile-(obj.numberAntiMetamers-1):quartile,2:3); % sorted from worst to least worst
+            metamerInfo = A(metamerQuartile+1:metamerQuartile+obj.numberMetamers,2:3); % sorted from best to least best
+            antiMetamerInfo = B(antiMetamerQuartile-(obj.numberAntiMetamers-1):antiMetamerQuartile,2:3); % sorted from worst to least worst
             a = randperm(101); % images
             b = randperm(1000); % frames
             randomImgInfo = [a(1:obj.numberRandom)' b(1:obj.numberRandom)'];

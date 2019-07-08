@@ -51,7 +51,7 @@ classdef RFDiskFlashedImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             
             % Rearrange observers into a vector for ease.
             if length(obj.observerNo) == 1
-                obj.observerVector = repelem(obj.observerNo,length(obj.observerNo);
+                obj.observerVector = repelem(obj.observerNo,length(obj.imageNo));
             else
                 obj.observerVector = obj.observerNo;
             end

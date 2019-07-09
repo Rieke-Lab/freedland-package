@@ -8,9 +8,9 @@ classdef RFDiskFlashedImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         tailTime = 250 % in ms
         
         % Natural image trajectory
-        imageNo = [5 2 2 12 6 41 66 97 101]; % natural image number (1 to 101), as a vector.
+        imageNo = [5 2 2 12 6 41 66 97 101 5 39 70 97]; % natural image number (1 to 101), as a vector.
         observerNo = 1; % observer number (1 to 19). Can be a single value or vector.
-        frameNumber = [200 969 148 664 180 854 961 697 144]; % frame number according to DOVES database. Must be a vector.
+        frameNumber = [200 969 148 664 180 854 961 697 144 600 288 96 9]; % frame number according to DOVES database. Must be a vector.
         randomlyDisplay = true; % display images in a random order
 
         % Additional parameters

@@ -26,7 +26,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         meanIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian'})
         overrideCoordinateType = symphonyui.core.PropertyType('char', 'row', {'pixels','RF'})
         replacementImageType = symphonyui.core.PropertyType('char', 'row', {'disk array','null array'})
-        presetValImageType = symphonyui.core.PropertyType('char', 'row', {'none','1','2'})
+        presetValType = symphonyui.core.PropertyType('char', 'row', {'none','1','2'})
         backgroundIntensity
         imageDatabase
         counter

@@ -1,6 +1,6 @@
 % Flash natural images based on a series of manually-defined presets.
 % By J. Freedland, 2019.
-classdef RFDiskFlashedImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
         preTime = 250 % in ms
@@ -8,9 +8,10 @@ classdef RFDiskFlashedImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         tailTime = 250 % in ms
         
         % Natural image trajectory
-        imageNo = [5 2 2 12 6 41 66 97 101 5 39 70 97]; % natural image number (1 to 101), as a vector.
+        imageNo = 5; % natural image number (1 to 101), as a vector.
         observerNo = 1; % observer number (1 to 19). Can be a single value or vector.
-        frameNumber = [200 969 148 664 180 854 961 697 144 600 288 96 9]; % frame number according to DOVES database. Must be a vector.
+        frameNumber = 200; % frame number according to DOVES database. Must be a vector.
+        presetVal = '1'; % can override image number and frame number using presets (if needed).
         randomlyDisplay = true; % display images in a random order
 
         % Additional parameters
@@ -25,6 +26,7 @@ classdef RFDiskFlashedImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         meanIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian'})
         overrideCoordinateType = symphonyui.core.PropertyType('char', 'row', {'pixels','RF'})
         replacementImageType = symphonyui.core.PropertyType('char', 'row', {'disk array','null array'})
+        presetValImageType = symphonyui.core.PropertyType('char', 'row', {'none','1','2'})
         backgroundIntensity
         imageDatabase
         counter
@@ -48,6 +50,14 @@ classdef RFDiskFlashedImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis); 
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+            
+            if strcmp(obj.presetVal,'1')
+                obj.imageNo = [5 2 2 12 6 41 66 97 101 5 39 70 97];
+                obj.frameNumber = [200 969 148 664 180 854 961 697 144 600 288 96 9];
+            elseif strcmp(obj.presetVal,'2')
+                obj.imageNo = [3,71,43,63,87,61,60,19,42,33,78,75,77,46,28,36,39,67,68,82,74,53,34,101,9,40,37,49,99,31,24,65,97,54,96,56,66];
+                obj.frameNumber = [191,92,545,229,131,530,168,103,793,89,381,365,907,440,771,377,603,180,851,642,96,607,419,6,993,324,116,60,333,273,986,204,828,84,168,803,518];
+            end
             
             % Rearrange observers into a vector for ease.
             if length(obj.observerNo) == 1

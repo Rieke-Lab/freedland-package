@@ -16,7 +16,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(10) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     

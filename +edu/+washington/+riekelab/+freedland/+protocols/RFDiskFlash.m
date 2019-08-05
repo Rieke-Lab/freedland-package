@@ -4,7 +4,7 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
         preTime = 250 % in ms
-        stimTime = 500 % in ms
+        stimTime = 250 % in ms
         tailTime = 250 % in ms
         
         % Natural image trajectory
@@ -34,7 +34,7 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(10) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     

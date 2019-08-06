@@ -49,6 +49,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
         integratedStat
         surroundMask
         mainMask
+        rfSizing
     end
 
     methods
@@ -193,7 +194,6 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
                     obj.rotateSlices = 0;
                     obj.disksIgnoreCut = 2;
                 end
-                
                 obj.stat{a,1} = findStatistic(obj, wTraj, dist, RFFilterVH, unwTraj);
                 
                 if ismember(presetNo,[1 2 3 4 11]) % no subunits
@@ -208,7 +208,6 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
                     obj.integratedStat(a,1) = mean(centerSurround);   
                 end
             end
-            
             obj.imageMatrix = uint8(unwTraj);          
 
             % There may be leaky pixels around the edge that could make
@@ -222,7 +221,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             protectiveMask = abs(protectiveMask - 1);
             obj.surroundMask = obj.surroundMask + protectiveMask; 
             
-            obj.mainMask = m <= max(canvasSize) / 2;
+            obj.mainMask = m <= max(canvasSize);
             
             obj.bigCounter = 1;
         end
@@ -240,8 +239,14 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             epoch.addParameter('rfSize',obj.rfSizing); % in pixels
             epoch.addParameter('frameNumber',obj.frameNumber); % in pixels
             epoch.addParameter('presetNo',obj.maskPresets(obj.bigCounter)); % in pixels
-            epoch.addParameter('individualStats',obj.stat{obj.bigCounter}); % in pixels
-            epoch.addParameter('singleMean',obj.integratedStat(obj.bigCounter)); % in pixels
+            epoch.addParameter('individualStats',obj.stat{obj.bigCounter});
+            epoch.addParameter('singleMean',obj.integratedStat(obj.bigCounter)); 
+            epoch.addParameter('meanDisks',obj.meanDisks);
+            epoch.addParameter('backgroundDisks',obj.backgroundDisks);
+            epoch.addParameter('xSliceFrequency',obj.xSliceFrequency);
+            epoch.addParameter('ySliceFrequency',obj.ySliceFrequency);
+            epoch.addParameter('rotateSlices', obj.rotateSlices);
+            epoch.addParameter('disksIgnoreCut',obj.disksIgnoreCut);
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -249,7 +254,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
             epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in pixels
             
-            obj.bigCounter = obj.bigCounter + 1;
+            obj.bigCounter = mod(obj.bigCounter,length(obj.maskPresets)) + 1;
         end
         
         function p = createPresentation(obj)
@@ -281,6 +286,16 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             p.addController(sceneVisible);
             
             % Apply far-surround mask
+            surround = stage.builtin.stimuli.Rectangle();
+            surround.position = canvasSize/2;
+            surround.size = [2*canvasSize(1) 2*canvasSize(2)];
+            surround.color = obj.backgroundIntensity;
+            annulusS = uint8(obj.surroundMask*255);
+            surroundMaskX = stage.core.Mask(annulusS);
+            surround.setMask(surroundMaskX);
+            p.addStimulus(surround);
+            
+            % Apply center mask
             mask = stage.builtin.stimuli.Rectangle();
             mask.position = canvasSize/2;
             mask.size = [canvasSize(1) canvasSize(2)];
@@ -293,16 +308,6 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             sceneVisible2 = stage.builtin.controllers.PropertyController(mask, 'visible', ...
                 @(state)state.time >= cycleTime + obj.preTime * 1e-3 && state.time < cycleTime + (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible2);
-
-            % Apply far-surround mask
-            surround = stage.builtin.stimuli.Rectangle();
-            surround.position = canvasSize/2;
-            surround.size = [2*canvasSize(1) 2*canvasSize(2)];
-            surround.color = obj.backgroundIntensity;
-            annulusS = uint8(obj.surroundMask*255);
-            surroundMaskX = stage.core.Mask(annulusS);
-            surround.setMask(surroundMaskX);
-            p.addStimulus(surround);
             
         end
         
@@ -389,7 +394,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             radius = obj.rawRadius ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')); % in VH pixels
             
             % The case with no cuts
-            if sum(obj.xSliceFrequency,obj.ySliceFrequency) == 0
+            if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
                 val = zeros(1,size(radius,2) - 1);
                 for a = 1:size(radius,2) - 1
                     if ismember(a,obj.meanDisks)
@@ -428,6 +433,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
                 k = abs(k - 90); % Rotate for proper polar coordinates
                 k(1:floor(imgSize(1)/2),:) = k(1:floor(imgSize(1)/2),:) + 180;
                 k(imgSize(1)/2,1:imgSize(2)/2) = 180; % adjust
+                k(imgSize(1)/2,imgSize(2)/2:end) = 0; % adjust
                 k = mod(k - obj.rotateSlices,360); % rotate as needed.
                 
                 % Calculate angles to operate over
@@ -446,7 +452,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
                     theta = [0:thetaX:90-(1E-10) 90:thetaY:180-(1E-10)];
                     theta = [theta theta + 180 360];
                 end
-                
+
                 val = zeros(1,(size(radius,2) - 1) * (size(theta,2) - 1));
                 
                 counter = 1;
@@ -489,6 +495,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
                             if skipDisk == 1
                                 val(1,counter) = NaN;
                             end
+
                         else
                             val(1,counter) = obj.backgroundIntensity;
                         end
@@ -501,11 +508,11 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
 
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages;
+            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.maskPresets);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages;
+            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.maskPresets);
         end
     end
 end

@@ -18,9 +18,9 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
         
         maskPresets = 1:12; % see draft. between 1 and 12.
         addRawMean = true; % add raw image mean as a control
-        subunitIntegration = 'linear'; % currently under development. no effect.
-        subunitWeight = [1 1 1 1]; % places weight by quadrant ([0 90 180 270] degrees).
-        centerSurroundIntegration = 'linear'; % currently under development. no effect.
+        subunitIntegration = 'linear';
+        subunitWeight = [1 1 1 1]; % places weight by quandrant ([0 90 180 270] degrees).
+        centerSurroundIntegration = 'linear';
         centerSurroundWeight = [1 1 1]; % places weight on specific regions: [center annulus surround].
         
         % Additional parameters
@@ -212,10 +212,9 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
                         nansum(temp(5:8))/sum(obj.subunitWeight) nansum(temp(9:12))/sum(obj.subunitWeight) ];
                     obj.integratedStat(a,1) = sum(centerSurround) / sum(obj.centerSurroundWeight);
                 elseif presetNo == 10 % 2 subunits
-                    subunitWeighting = repelem(obj.subunitWeight,2);
-                    temp = obj.stat{a,1} .* repmat(subunitWeighting,1,3);
+                    temp = obj.stat{a,1} .* repmat(repelem(obj.subunitWeight,2),1,3);
                     centerSurround = [nansum(temp(1:8))/sum(obj.subunitWeight)...
-                        nansum(temp(9:16))/sum(subunitWeighting) nansum(temp(17:24))/sum(subunitWeighting) ];
+                        nansum(temp(5:8))/sum(obj.subunitWeight) nansum(temp(9:12))/sum(obj.subunitWeight) ];
                     obj.integratedStat(a,1) = sum(centerSurround) / sum(obj.centerSurroundWeight);
                 end
             end

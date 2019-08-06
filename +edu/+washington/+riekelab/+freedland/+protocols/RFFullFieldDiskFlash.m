@@ -208,16 +208,21 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
                     obj.integratedStat(a,1) = sum(temp) / sum(obj.centerSurroundWeight);
                 elseif ismember(presetNo,[5 6 7 8 9 12]) % one subunit
                     temp = obj.stat{a,1} .* repmat(obj.subunitWeight,1,3);
-                    centerSurround = [nansum(temp(1:4))/sum(obj.subunitWeight)...
-                        nansum(temp(5:8))/sum(obj.subunitWeight) nansum(temp(9:12))/sum(obj.subunitWeight) ];
+                    tempCheck = ~isnan(temp); % only consider real values (don't overdivide)
+                    centerSurround = [nansum(temp(1:4))/sum(obj.subunitWeight(tempCheck(1:4)))...
+                        nansum(temp(5:8))/sum(obj.subunitWeight(tempCheck(5:8)))...
+                        nansum(temp(9:12))/sum(obj.subunitWeight(tempCheck(9:12))) ];
                     obj.integratedStat(a,1) = sum(centerSurround) / sum(obj.centerSurroundWeight);
                 elseif presetNo == 10 % 2 subunits
                     subunitWeighting = repelem(obj.subunitWeight,2);
                     temp = obj.stat{a,1} .* repmat(subunitWeighting,1,3);
-                    centerSurround = [nansum(temp(1:8))/sum(obj.subunitWeight)...
-                        nansum(temp(9:16))/sum(subunitWeighting) nansum(temp(17:24))/sum(subunitWeighting) ];
+                    tempCheck = ~isnan(temp); % only consider real values (don't overdivide)
+                    centerSurround = [nansum(temp(1:8))/sum(obj.subunitWeight(tempCheck(1:4)))...
+                        nansum(temp(9:16))/sum(subunitWeighting(tempCheck(5:8)))...
+                        nansum(temp(17:24))/sum(subunitWeighting(tempCheck(9:12))) ];
                     obj.integratedStat(a,1) = sum(centerSurround) / sum(obj.centerSurroundWeight);
                 end
+
             end
             
             if obj.addRawMean == true
@@ -271,7 +276,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
             epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in pixels
             
-            if obj.obj.addRawMean == true
+            if obj.addRawMean == true
                 obj.bigCounter = mod(obj.bigCounter,length(obj.maskPresets)+1) + 1;
             else
                 obj.bigCounter = mod(obj.bigCounter,length(obj.maskPresets)) + 1;

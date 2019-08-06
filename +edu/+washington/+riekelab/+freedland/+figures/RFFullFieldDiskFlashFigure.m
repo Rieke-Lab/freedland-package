@@ -6,7 +6,7 @@ classdef RFFullFieldDiskFlashFigure < symphonyui.core.FigureHandler
         ampDevice
         preTime
         stimTime
-        annulusSize
+        tailTime
     end
     
     properties (Access = private)
@@ -31,10 +31,10 @@ classdef RFFullFieldDiskFlashFigure < symphonyui.core.FigureHandler
             ip.addParameter('stimTime', [], @(x)isvector(x));
             ip.addParameter('tailTime', [], @(x)isvector(x));
             ip.parse(varargin{:});
+
             obj.preTime = ip.Results.preTime;
             obj.stimTime = ip.Results.stimTime;
             obj.tailTime = ip.Results.tailTime;
-            obj.annulusSize = ip.Results.annulusSize;
             
             obj.createUi();
         end
@@ -48,7 +48,7 @@ classdef RFFullFieldDiskFlashFigure < symphonyui.core.FigureHandler
                 'FontSize', get(obj.figureHandle, 'DefaultUicontrolFontSize'), ...
                 'XTickMode', 'auto');
             xlabel(obj.axesHandle, 'preset number');
-            ylabel(obj.axesHandle, 'flashed spikes / image spikes');
+            ylabel(obj.axesHandle, 'ON flashed disk spikes / ON image spikes');
             title(obj.axesHandle,'full field flash quality');
             
         end
@@ -72,9 +72,15 @@ classdef RFFullFieldDiskFlashFigure < symphonyui.core.FigureHandler
             S = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(epochResponseTrace);
             
             % pull total spikes during image flashes
-            naturalImageResp = sum(S.sp > prePts & S.sp < prePts + stimPts); %spike count during stim
-            flashResp = sum(S.sp > totalStimTime + prePts & S.sp < totalStimTime + prePts + stimPts); %spike count during stim
-            newEpochResponse = flashResp / naturalImageResp;
+            naturalImageRespON = sum(S.sp > prePts & S.sp < prePts + stimPts); %spike count during stim
+            naturalImageRespOFF = sum(S.sp > prePts + stimPts & S.sp < prePts + stimPts + tailPts); %spike count during stim
+            flashRespON = sum(S.sp > totalStimTime + prePts & S.sp < totalStimTime + prePts + stimPts); %spike count during stim
+            flashRespOFF = sum(S.sp > totalStimTime + prePts + stimPts & S.sp < totalStimTime + prePts + stimPts + tailPts); %spike count during stim
+            newEpochResponse = (flashRespON-flashRespOFF) / (naturalImageRespON-naturalImageRespOFF);
+            
+            if newEpochResponse == Inf || newEpochResponse == -Inf || isnan(newEpochResponse)
+                newEpochResponse = 0;
+            end
             
             obj.allSpotSizes = cat(1,obj.allSpotSizes,currentSpotSize);
             obj.allEpochResponses = cat(1,obj.allEpochResponses,newEpochResponse);

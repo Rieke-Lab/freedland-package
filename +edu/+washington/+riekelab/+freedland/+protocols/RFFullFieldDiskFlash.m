@@ -69,7 +69,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.RFFullFieldDiskFlashFigure',...
-                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'preTime',obj.preTime,...
+                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,...
                 'stimTime',obj.stimTime,'tailTime',obj.tailTime); 
 
             % Pull base trajectories and image information.
@@ -259,7 +259,7 @@ classdef RFFullFieldDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageP
             epoch.addParameter('radii', obj.rawRadius); % in pixels
             epoch.addParameter('rfSize',obj.rfSizing); % in pixels
             epoch.addParameter('frameNumber',obj.frameNumber); % in pixels
-            epoch.addParameter('presetNo',obj.maskPresets(obj.bigCounter)-1); % in pixels
+            epoch.addParameter('presetNo',obj.bigCounter-1); % in pixels
             epoch.addParameter('individualStats',obj.stat{obj.bigCounter});
             epoch.addParameter('singleMean',obj.integratedStat(obj.bigCounter)); 
             epoch.addParameter('meanDisks',obj.meanDisks);

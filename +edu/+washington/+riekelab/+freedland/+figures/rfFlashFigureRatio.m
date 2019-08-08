@@ -1,12 +1,13 @@
 % Adapted from MHT's 'area summation figure'
 
-classdef RFFullFieldDiskFlashFigure < symphonyui.core.FigureHandler
+classdef rfFlashFigureRatio < symphonyui.core.FigureHandler
     
     properties (SetAccess = private)
         ampDevice
         preTime
         stimTime
         tailTime
+        xval
     end
     
     properties (Access = private)
@@ -30,11 +31,14 @@ classdef RFFullFieldDiskFlashFigure < symphonyui.core.FigureHandler
             ip.addParameter('preTime', [], @(x)isvector(x));
             ip.addParameter('stimTime', [], @(x)isvector(x));
             ip.addParameter('tailTime', [], @(x)isvector(x));
+            ip.addParameter('tailTime', [], @(x)isvector(x));
+            ip.addParameter('xval', []);
             ip.parse(varargin{:});
 
             obj.preTime = ip.Results.preTime;
             obj.stimTime = ip.Results.stimTime;
             obj.tailTime = ip.Results.tailTime;
+            obj.xval = ip.Results.xval;
             
             obj.createUi();
         end
@@ -60,7 +64,7 @@ classdef RFFullFieldDiskFlashFigure < symphonyui.core.FigureHandler
             response = epoch.getResponse(obj.ampDevice);
             epochResponseTrace = response.getData();
             sampleRate = response.sampleRate.quantityInBaseUnits;
-            currentSpotSize = epoch.parameters('presetNo');
+            currentSpotSize = epoch.parameters(obj.xval);
             prePts = sampleRate*obj.preTime/1000;
             stimPts = sampleRate*obj.stimTime/1000;
             tailPts = sampleRate*obj.tailTime/1000;

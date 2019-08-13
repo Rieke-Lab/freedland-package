@@ -25,7 +25,7 @@ classdef rfFlashFigureRatio < symphonyui.core.FigureHandler
     
     methods
         
-        function obj = RFFullFieldDiskFlashFigure(ampDevice, varargin)
+        function obj = rfFlashFigureRatio(ampDevice, varargin)
             obj.ampDevice = ampDevice;            
             ip = inputParser();
             ip.addParameter('preTime', [], @(x)isvector(x));

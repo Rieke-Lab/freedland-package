@@ -54,11 +54,11 @@ classdef SingleSpotColorOpponency < edu.washington.riekelab.protocols.RiekeLabSt
             spot1.radiusY = spotDiameterPix/2;
             spot1.position = canvasSize/2;
             
-            if strmp(obj.color1,'red')
+            if strcmp(obj.color1,'red')
                 spot1.color = [obj.spotIntensity 0 0];
-            elseif strmp(obj.color1,'green')
+            elseif strcmp(obj.color1,'green')
                 spot1.color = [0 obj.spotIntensity 0];
-            elseif strmp(obj.color1,'blue')
+            elseif strcmp(obj.color1,'blue')
                 spot1.color = [0 0 obj.spotIntensity];
             end
 
@@ -73,11 +73,11 @@ classdef SingleSpotColorOpponency < edu.washington.riekelab.protocols.RiekeLabSt
             spot2.radiusY = spotDiameterPix/2;
             spot2.position = canvasSize/2;
             
-            if strmp(obj.color2,'red')
+            if strcmp(obj.color2,'red')
                 spot2.color = [obj.spotIntensity 0 0];
-            elseif strmp(obj.color2,'green')
+            elseif strcmp(obj.color2,'green')
                 spot2.color = [0 obj.spotIntensity 0];
-            elseif strmp(obj.color2,'blue')
+            elseif strcmp(obj.color2,'blue')
                 spot2.color = [0 0 obj.spotIntensity];
             end
             
@@ -92,7 +92,7 @@ classdef SingleSpotColorOpponency < edu.washington.riekelab.protocols.RiekeLabSt
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             
             device = obj.rig.getDevice(obj.amp);
-            duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+            duration = 2 * (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('figureLeader', 1);

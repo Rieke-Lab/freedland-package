@@ -1,6 +1,6 @@
 % Replace a natural movie with a variety of integrated disks.
 % By J. Freedland, 2019.
-classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol
+classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol
     properties
         % Stimulus timing
         preTime = 250 % in ms
@@ -24,7 +24,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         xSliceFrequency = 1; % how many radial slices to cut between 0 and 90 degrees.
         ySliceFrequency = 1; % how many radial slices to cut between 90 and 180 degrees.
         rotateSlices = 0; % degrees to rotate all slices (0 to 90).
-        disksIgnoreCut = [3 0]; % starting from the center disk and moving outwards, how many disks should we NOT cut (keep circular)?
+        disksIgnoreCut = [0 0]; % starting from the center disk and moving outwards, how many disks should we NOT cut (keep circular)?
 
         % Disk type
         meanDisks = [1 2 3]; % starting from the center disk and moving outwards, which disks should be averaged?
@@ -36,9 +36,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         meanIntegration = 'gaussian';
         contrastIntegration = 'gaussian';
         
+        playSequence = true; % plays a predefined sequence of protocols
+        
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(10) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     
@@ -68,18 +70,24 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         diskOpacity
         spatialFrequencyPx
         rfSizing
+        firstRunComplete
     end
 
     methods
         
         function didSetRig(obj)
-            didSetRig@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
+            didSetRig@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
             [obj.amp, obj.ampType] = obj.createDeviceNamesProperty('Amp');
+        end
+        
+        function resetRun(obj)
+            resetRun@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
         end
 
         function prepareRun(obj)
 
-            prepareRun@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj);
+            prepareRun@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
+            redefineSettings(obj); % redefine settings as needed.
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             if strcmp(obj.trajectory,'both') % Splits the epoch into two for online analysis.
@@ -122,7 +130,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
                     error('Too many disks and slices. Will cause Stage to crash. Please choose a different set.')
                 end
             end
-            
+                        
             % Pull base trajectories and image information.
             [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.imageNo, obj.observerNo,...
                     'amplification', obj.amplification,'mirroring', true);
@@ -281,7 +289,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
         
         function prepareEpoch(obj, epoch)
             
-            prepareEpoch@edu.washington.riekelab.freedland.protocols.RepeatPrerenderStageProtocol(obj, epoch);
+            prepareEpoch@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj, epoch);
             device = obj.rig.getDevice(obj.amp);
             if ~strcmp(obj.trajectory,'both')
                 duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
@@ -294,6 +302,30 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('radii', obj.radii); % in pixels
             epoch.addParameter('rfSize',obj.rfSizing); % in pixels
+            
+            if obj.playSequence == true % add metadata 
+                
+                R = cell(7,1); % important data
+                % Predefined settings (see subclass)
+                R{1,1} = repelem([5 5 7 70 5 5 7 70 5 5 5 7 70 5 5 5 5 5],1,obj.numberOfAverages)';
+                R{2,1} = repelem([0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1],1,obj.numberOfAverages)';
+                R{3,1} = repelem([0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1],1,obj.numberOfAverages)';
+                R{4,1} = repelem([0 0 0 0 0 0 0 0 0 0 0 0 0 0 45 0 0 0],1,obj.numberOfAverages)';
+                R{5,1} = repelem([0 0; 0 0; 0 0; 0 0; 0 0; 0 0; 0 0; 0 0;...
+                    2 3; 0 3; 0 0; 0 0; 0 0; 2 3; 2 3; 2 3; 0 0; 0 2],obj.numberOfAverages,1);
+                R{6,1} = repelem([2 3 0; 1 0 0; 1 0 0; 1 0 0; 1 2 0; 1 2 3; 1 2 3; 1 2 3;...
+                    1 2 3; 1 2 3; 1 2 3; 1 2 3; 1 2 3; 1 0 0; 1 0 0; 1 0 0; 1 3 0; 1 2 3],obj.numberOfAverages,1);
+                R{7,1} = repelem([1 0 0; 2 3 0; 2 3 0; 2 3 0; 0 0 3; 0 0 0; 0 0 0; 0 0 0;...
+                    0 0 0; 0 0 0; 0 0 0; 0 0 0; 0 0 0; 2 3 0; 2 3 0; 2 3 0; 2 0 0; 0 0 0],obj.numberOfAverages,1);
+                
+                epoch.addParameter('imageNo', R{1,1}(obj.numEpochsCompleted+1,:));
+                epoch.addParameter('xSliceFrequency', R{2,1}(obj.numEpochsCompleted+1,:));
+                epoch.addParameter('ySliceFrequency', R{3,1}(obj.numEpochsCompleted+1,:));
+                epoch.addParameter('rotateSlices', R{4,1}(obj.numEpochsCompleted+1,:));
+                epoch.addParameter('disksIgnoreCut', R{5,1}(obj.numEpochsCompleted+1,:));
+                epoch.addParameter('meanDisks', R{6,1}(obj.numEpochsCompleted+1,:));
+                epoch.addParameter('backgroundDisks', R{7,1}(obj.numEpochsCompleted+1,:));
+            end
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -866,12 +898,26 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RepeatPrerend
             end
         end
         
+        function redefineSettings(obj)
+            if obj.playSequence == true
+                redefineSettings@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
+            end
+        end
+        
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages;
+            if obj.playSequence == true
+                tf = obj.numEpochsPrepared < obj.numberOfAverages*18;
+            else
+                tf = obj.numEpochsPrepared < obj.numberOfAverages;
+            end  
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages;
+            if obj.playSequence == true
+                tf = obj.numEpochsCompleted < obj.numberOfAverages*18;
+            else
+                tf = obj.numEpochsCompleted < obj.numberOfAverages;
+            end
         end
     end
 end

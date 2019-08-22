@@ -31,7 +31,6 @@ classdef rfFlashFigureRatio < symphonyui.core.FigureHandler
             ip.addParameter('preTime', [], @(x)isvector(x));
             ip.addParameter('stimTime', [], @(x)isvector(x));
             ip.addParameter('tailTime', [], @(x)isvector(x));
-            ip.addParameter('tailTime', [], @(x)isvector(x));
             ip.addParameter('xval', []);
             ip.parse(varargin{:});
 

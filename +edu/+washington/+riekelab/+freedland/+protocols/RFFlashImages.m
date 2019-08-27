@@ -1,4 +1,5 @@
 % Flash natural images based on a series of manually-defined presets.
+% Added updating background intensity: 08/26/2019
 % By J. Freedland, 2019.
 classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
@@ -32,6 +33,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         counter
         permut
         observerVector
+        backgroundIntensities
     end
 
     methods
@@ -76,7 +78,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             end
             
             % Use DOVES database to identify images along trajectory
-            imageFrames = findImage(obj);
+            [imageFrames, obj.backgroundIntensities] = findImage(obj);
             obj.imageDatabase = uint8(imageFrames);
             
             obj.counter = 0;
@@ -115,9 +117,10 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();             
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
 
-            % Set background intensity
-            p.setBackgroundColor(obj.backgroundIntensity);
             A = obj.permut(obj.counter+1);
+            
+            % Set background intensity
+            p.setBackgroundColor(obj.backgroundIntensities(A,1))
             
             % Prep to display image
             scene = stage.builtin.stimuli.Image(obj.imageDatabase(:,:,A));
@@ -144,7 +147,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         % Apply RF Filter over the entire trajectory.
-        function imageFrames = findImage(obj)
+        function [imageFrames, backgroundIntensities] = findImage(obj)
             
             % Calculate frame size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
@@ -153,6 +156,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             yRange = floor(imgSize(2) / 2);
             
             imageFrames = zeros(imgSize(2),imgSize(1),length(obj.imageNo)); % matrix with images
+            backgroundIntensities = zeros(length(obj.imageNo),1);
             
             for a = 1:length(obj.imageNo) % Walk along our vectors
                 tempImage = obj.imageNo(a);
@@ -164,11 +168,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 img = pictureInformation.image;
                 img = (img./max(max(img)));              
                 img2 = img.*255;
-                
-                if a == 1
-                    obj.backgroundIntensity = mean(img(:)); % Set background intensity to reference image
-                end
-            
+                            
                 % Produce trajectories
                 xTraj = baseMovement.x(obj.frameNumber(a)) + fixMovement.x(obj.frameNumber(a));
                 yTraj = baseMovement.y(obj.frameNumber(a)) + fixMovement.y(obj.frameNumber(a));
@@ -183,6 +183,9 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 % create image
                 imageFrames(:,:,a) = img2(centeredYTraj-yRange:centeredYTraj+yRange-1,...
                     centeredXTraj-xRange:centeredXTraj+xRange-1); 
+                
+                R = imageFrames(:,:,a);
+                backgroundIntensities(a,1) = mean(R(:)) ./ 255;
             end
         end
         

@@ -79,15 +79,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             didSetRig@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
             [obj.amp, obj.ampType] = obj.createDeviceNamesProperty('Amp');
         end
-        
-        function resetRun(obj)
-            resetRun@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
-        end
 
         function prepareRun(obj)
 
             prepareRun@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
-            redefineSettings(obj); % redefine settings as needed.
+            redefineSettings(obj, true); % redefine settings as needed.
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             if strcmp(obj.trajectory,'both') % Splits the epoch into two for online analysis.
@@ -290,6 +286,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         function prepareEpoch(obj, epoch)
             
             prepareEpoch@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj, epoch);
+            
+            if obj.numEpochsCompleted > 0 && mod(obj.numEpochsCompleted,obj.numberOfAverages) == 0
+                redefineSettings(obj, false)
+            end
+            
             device = obj.rig.getDevice(obj.amp);
             if ~strcmp(obj.trajectory,'both')
                 duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
@@ -299,32 +300,19 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('radii', obj.radii); % in pixels
             epoch.addParameter('rfSize',obj.rfSizing); % in pixels
             
             if obj.playSequence == true % add metadata 
-                
-                R = cell(7,1); % important data
-                % Predefined settings (see subclass)
-                R{1,1} = repelem([5 5 7 70 5 5 7 70 5 5 5 7 70 5 5 5 5 5],1,obj.numberOfAverages)';
-                R{2,1} = repelem([0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1],1,obj.numberOfAverages)';
-                R{3,1} = repelem([0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1],1,obj.numberOfAverages)';
-                R{4,1} = repelem([0 0 0 0 0 0 0 0 0 0 0 0 0 0 45 0 0 0],1,obj.numberOfAverages)';
-                R{5,1} = repelem([0 0; 0 0; 0 0; 0 0; 0 0; 0 0; 0 0; 0 0;...
-                    2 3; 0 3; 0 0; 0 0; 0 0; 2 3; 2 3; 2 3; 0 0; 0 2],obj.numberOfAverages,1);
-                R{6,1} = repelem([2 3 0; 1 0 0; 1 0 0; 1 0 0; 1 2 0; 1 2 3; 1 2 3; 1 2 3;...
-                    1 2 3; 1 2 3; 1 2 3; 1 2 3; 1 2 3; 1 0 0; 1 0 0; 1 0 0; 1 3 0; 1 2 3],obj.numberOfAverages,1);
-                R{7,1} = repelem([1 0 0; 2 3 0; 2 3 0; 2 3 0; 0 0 3; 0 0 0; 0 0 0; 0 0 0;...
-                    0 0 0; 0 0 0; 0 0 0; 0 0 0; 0 0 0; 2 3 0; 2 3 0; 2 3 0; 2 0 0; 0 0 0],obj.numberOfAverages,1);
-                
-                epoch.addParameter('imageNo', R{1,1}(obj.numEpochsCompleted+1,:));
-                epoch.addParameter('xSliceFrequency', R{2,1}(obj.numEpochsCompleted+1,:));
-                epoch.addParameter('ySliceFrequency', R{3,1}(obj.numEpochsCompleted+1,:));
-                epoch.addParameter('rotateSlices', R{4,1}(obj.numEpochsCompleted+1,:));
-                epoch.addParameter('disksIgnoreCut', R{5,1}(obj.numEpochsCompleted+1,:));
-                epoch.addParameter('meanDisks', R{6,1}(obj.numEpochsCompleted+1,:));
-                epoch.addParameter('backgroundDisks', R{7,1}(obj.numEpochsCompleted+1,:));
+                epoch.addParameter('specificImageNo', obj.imageNo);
+                epoch.addParameter('specificXSliceFrequency', obj.xSliceFrequency);
+                epoch.addParameter('specificYSliceFrequency', obj.ySliceFrequency);
+                epoch.addParameter('specificRotateSlices', obj.rotateSlices);
+                epoch.addParameter('specificDisksIgnoreCut', obj.disksIgnoreCut);
+                epoch.addParameter('specificMeanDisks', obj.meanDisks);
+                epoch.addParameter('specificBackgroundDisks', obj.backgroundDisks);
+            else
+                epoch.addParameter('backgroundIntensity', obj.backgroundIntensity); % not accurate for sequence
             end
             
             % Add metadata from Stage, makes analysis easier.
@@ -898,9 +886,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             end
         end
         
-        function redefineSettings(obj)
+        function redefineSettings(obj,t)
             if obj.playSequence == true
-                redefineSettings@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
+                redefineSettings@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj,t);
             end
         end
         

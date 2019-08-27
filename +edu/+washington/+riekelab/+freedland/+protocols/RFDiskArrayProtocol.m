@@ -12,7 +12,9 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
     
     methods
         
-        function redefineSettings(obj)
+        function redefineSettings(obj,t)
+            
+            % t: whether to advance forward to the next setting (t/f).
             
             % Predefined settings
             possibleoverrideRadii = repmat([0 0.75 2 3],18,1);
@@ -28,19 +30,22 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
             possiblebackgroundDisks = [1 0 0; 2 3 0; 2 3 0; 2 3 0; 0 0 3; 0 0 0; 0 0 0; 0 0 0;...
                 0 0 0; 0 0 0; 0 0 0; 0 0 0; 0 0 0; 2 3 0; 2 3 0; 2 3 0; 2 0 0; 0 0 0];
 
-            % Assign variables
-            obj.overrideRadii = possibleoverrideRadii(obj.runNo,:);
-            obj.imageNo = possibleimageNo(obj.runNo,:);
-            obj.overrideCoordinate = possibleoverrideCoordinate{obj.runNo,1};
-            obj.xSliceFrequency = possiblexSliceFrequency(obj.runNo,:);
-            obj.ySliceFrequency = possibleySliceFrequency(obj.runNo,:);  
-            obj.rotateSlices = possiblerotateSlices(obj.runNo,:);
-            obj.disksIgnoreCut = possibledisksIgnoreCut(obj.runNo,:);
-            obj.meanDisks = possiblemeanDisks(obj.runNo,:);
-            obj.backgroundDisks = possiblebackgroundDisks(obj.runNo,:);
+            runVal = obj.runNo;
+                
+            obj.overrideRadii = possibleoverrideRadii(runVal,:);
+            obj.imageNo = possibleimageNo(runVal,:);
+            obj.overrideCoordinate = possibleoverrideCoordinate{runVal,1};
+            obj.xSliceFrequency = possiblexSliceFrequency(runVal,:);
+            obj.ySliceFrequency = possibleySliceFrequency(runVal,:);  
+            obj.rotateSlices = possiblerotateSlices(runVal,:);
+            obj.disksIgnoreCut = possibledisksIgnoreCut(runVal,:);
+            obj.meanDisks = possiblemeanDisks(runVal,:);
+            obj.backgroundDisks = possiblebackgroundDisks(runVal,:);
 
-            obj.runNo = obj.runNo + 1;
-            obj.changeRuns = 1;
+            if t == true
+                obj.runNo = obj.runNo + 1;
+                obj.changeRuns = 1;
+            end
         end
         
         function prepareEpoch(obj, epoch)
@@ -60,6 +65,7 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
             
             if obj.playSequence == true
                 if mod(obj.numEpochsCompleted,obj.numberOfAverages) == 0 && obj.numEpochsCompleted > 0
+                    
                     temp1 = obj.numEpochsPrepared;
                     temp2 = obj.numEpochsCompleted;
                     temp3 = obj.numIntervalsPrepared;

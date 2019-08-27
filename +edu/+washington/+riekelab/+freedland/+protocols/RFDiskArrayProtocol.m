@@ -18,7 +18,7 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
             
             % Predefined settings
             possibleoverrideRadii = repmat([0 0.75 2 3],18,1);
-            possibleimageNo = [5 5 7 70 5 5 7 70 5 5 5 7 70 5 5 5 5 5]';
+            possibleimageNo = [5 5 81 85 5 5 81 85 5 5 5 81 85 5 5 5 5 5]';
             possibleoverrideCoordinate = repmat({'RF'},18,1);
             possiblexSliceFrequency = [0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1]';
             possibleySliceFrequency = [0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1]';

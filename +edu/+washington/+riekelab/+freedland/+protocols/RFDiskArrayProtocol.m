@@ -4,6 +4,8 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
         waitingForHardwareToStart
         changeRuns = 0
         runNo = 1
+        firstRun = 1
+        order
     end
     
     methods (Abstract)
@@ -15,6 +17,15 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
         function redefineSettings(obj,t)
             
             % t: whether to advance forward to the next setting (t/f).
+            
+            if obj.firstRun == 1 
+                if obj.randomize == true
+                    obj.order = randperm(18);
+                else
+                    obj.order = 1:18;
+                end
+                obj.firstRun = 0;
+            end
             
             % Predefined settings
             possibleoverrideRadii = repmat([0 0.75 2 3],18,1);
@@ -30,7 +41,7 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
             possiblebackgroundDisks = [1 0 0; 2 3 0; 2 3 0; 2 3 0; 0 0 3; 0 0 0; 0 0 0; 0 0 0;...
                 0 0 0; 0 0 0; 0 0 0; 0 0 0; 0 0 0; 2 3 0; 2 3 0; 2 3 0; 2 0 0; 0 0 0];
 
-            runVal = obj.runNo;
+            runVal = obj.order(obj.runNo);
                 
             obj.overrideRadii = possibleoverrideRadii(runVal,:);
             obj.imageNo = possibleimageNo(runVal,:);

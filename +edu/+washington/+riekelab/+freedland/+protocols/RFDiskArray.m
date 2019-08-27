@@ -37,6 +37,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         contrastIntegration = 'gaussian';
         
         playSequence = true; % plays a predefined sequence of protocols
+        randomize = true; % plays sequence of protocols in random order
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -70,7 +71,6 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         diskOpacity
         spatialFrequencyPx
         rfSizing
-        firstRunComplete
     end
 
     methods

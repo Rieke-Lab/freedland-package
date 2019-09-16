@@ -128,9 +128,6 @@ classdef RFDiskFlash < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             % Prepare trajectory with our RF Filter.
             [wTraj, dist, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
-            
-            % Based on single frame only, not full image
-            obj.backgroundIntensity = mean(unwTraj(:));
 
             % For an override, convert RF units into pixels.
             if strcmp(obj.overrideCoordinate,'RF') && obj.overrideRadiiLogical == true                   

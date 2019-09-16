@@ -54,6 +54,7 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
             obj.backgroundDisks = possiblebackgroundDisks(runVal,:);
 
             if t == true
+                disp(obj.runNo);
                 obj.runNo = obj.runNo + 1;
                 obj.changeRuns = 1;
             end

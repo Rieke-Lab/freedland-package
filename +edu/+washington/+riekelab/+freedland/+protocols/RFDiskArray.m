@@ -659,12 +659,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 tempFilt = imresize(tempFilt,size(m));
             end
             
-            % while the rig automatically centers the stimulus, our
-            % calculation doesn't.
-            centering = obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset'); % in mu
-            centeringPix = centering ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
-            centeredXTraj = round(obj.xTraj - centeringPix(1));
-            centeredYTraj = round(obj.yTraj + centeringPix(2));
+            % the rig automatically centers the stimulus
+            centeredXTraj = round(obj.xTraj);
+            centeredYTraj = round(obj.yTraj);
             
             % create trajectory  
             r = zeros(size(m,1),size(m,2),1,size(obj.xTraj,2));

@@ -83,7 +83,14 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         function prepareRun(obj)
 
             prepareRun@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj);
-            redefineSettings(obj, true); % redefine settings as needed.
+            
+            % Must have prerender set to avoid lagging through the replacement trajectory.     
+            if ~strcmp(obj.trajectory,'natural') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
+                error('Must have prerender set') 
+            end
+            
+            % Define settings as needed.
+            redefineSettings(obj, true);
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             if strcmp(obj.trajectory,'both') % Splits the epoch into two for online analysis.
@@ -95,12 +102,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             end
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+
             
-            % Catch common errors        
-            if ~strcmp(obj.trajectory,'natural') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
-                error('Must have prerender set') % Pre-render required, else trajectory lags and isn't accurate
-            end
-            
+            % Catch common errors.
             checkDisks = sum(1:obj.disks);
             checkAssignments = sum([obj.meanDisks obj.contrastDisks obj.meanContrastDisks obj.naturalDisks obj.backgroundDisks]);
             if sum(obj.overrideRadii) > 0

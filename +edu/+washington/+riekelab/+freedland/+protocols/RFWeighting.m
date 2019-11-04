@@ -62,7 +62,6 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             obj.selectionIndex = 1; % walks along random order
             obj.currentCenterSigma = obj.centerSigmaSequence(obj.selectionIndex);
-            [~,obj.backgroundIntensity] = calculateFilter(obj);
         end
         
         function prepareEpoch(obj, epoch)
@@ -88,7 +87,7 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             p.setBackgroundColor(obj.backgroundIntensity);
             
             % scale to maximum light intensity
-            obj.imageMatrix = uint8(rfFilter);
+            obj.imageMatrix = uint8(rfFilter .* 255);
             
             scene = stage.builtin.stimuli.Image(obj.imageMatrix);
             scene.size = [size(obj.imageMatrix,2) size(obj.imageMatrix,1)];
@@ -134,12 +133,12 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % This is the output from RFDiskArray.
             % However, we want to control light levels very closely.
             lightLevelFilter = normFilter .* obj.maxLightLevel;
-            obj.backgroundIntensity = 0;
             
-            if strcmp(obj.cellType,'OFF')
+            if strcmp(obj.cellClass,'OFF')
                 lightLevelFilter = abs(lightLevelFilter - obj.maxLightLevel); % Complementary
-                obj.backgroundIntensity = obj.maxLightLevel;
             end
+            
+            obj.backgroundIntensity = mean(lightLevelFilter(:));
         end
    
         function tf = shouldContinuePreparingEpochs(obj)

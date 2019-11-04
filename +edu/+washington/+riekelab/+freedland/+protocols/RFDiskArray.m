@@ -65,6 +65,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         diskExpand
         diskOpacity
         rfSizing
+        preUnit
+        postUnit
     end
 
     methods
@@ -134,7 +136,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             obj.backgroundIntensity = mean(img(:));
             img2 = img.*255;
             obj.imageMatrix = uint8(img2);
-            
+
             % Produce trajectories
             obj.xTraj = baseMovement.x + fixMovement.x;
             obj.yTraj = baseMovement.y + fixMovement.y;
@@ -156,15 +158,15 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 
                 % Identify type of disks
                 obj.meanDisksLogical = zeros(1,obj.disks);
-                obj.meanDisksLogical(obj.meanDisks) = 1;
                 obj.meanDisks(obj.meanDisks == 0) = [];
+                obj.meanDisksLogical(obj.meanDisks) = 1;
                       
                 % Identify corresponding RF Filter
                 [RFFilter,obj.rfSizing] = calculateFilter(obj);
 
                 % Prepare trajectory with our RF Filter
                 [wTraj, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
-                                
+
                 % For an override, convert RF units into pixels.
                 if strcmp(obj.overrideCoordinate,'RF') && obj.overrideRadiiLogical == true                   
                     RFConversion(obj)
@@ -184,8 +186,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 
                 % Recalculate masks for pixels (instead of VH pixels).
                 obj.diskExpand = 0.5;   % expands disks by 0.005x to ensure overlap.   
-                obj.diskOpacity = 1;    % opacity of disks placed. This is a good setting to play with during stimulus testing.
-                obj.radii = convertUnits(obj.radii,'VH2PIX'); % convert from VH to px
+                obj.diskOpacity = 1;    % opacity of disks placed. This is a good setting to play with during stimulus testing. (Matches pixels underneath).
+                
+                obj.preUnit = obj.radii;
+                changeUnits(obj,'VH2PIX'); % convert from VH (DOVES) to px
+                obj.radii = obj.postUnit;
                 
                 % In pixels
                 [xx, yy] = meshgrid(1:canvasSize(1),1:canvasSize(2));
@@ -257,8 +262,14 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             % Adjust axes and units for monitor (DOVES VH units to pixels)
             obj.xTraj = -(obj.xTraj - size(img,2)/2);
             obj.yTraj = (obj.yTraj - size(img,1)/2);
-            obj.xTraj = convertUnits(obj.xTraj,'VH2PIX');
-            obj.yTraj = convertUnits(obj.yTraj,'VH2PIX');
+            
+            obj.preUnit = obj.xTraj;
+            changeUnits(obj,'VH2PIX'); % convert from VH to px
+            obj.xTraj = obj.postUnit;
+
+            obj.preUnit = obj.yTraj;
+            changeUnits(obj,'VH2PIX'); % convert from VH to px
+            obj.yTraj = obj.postUnit;
         end
         
         function prepareEpoch(obj, epoch)
@@ -363,6 +374,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                             annulus.size = [canvasSize(1) canvasSize(2)]; 
                             annulus.orientation = 0; 
                             annulus.spatialFreq = 0;
+                            annulus.opacity = obj.specificOpacity(1,q);
                             annulusA = uint8(obj.masks(:,:,q)*255);
                             annulusMaskX = stage.core.Mask(annulusA);
                             annulus.setMask(annulusMaskX);
@@ -423,6 +435,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                                 annulus.size = [canvasSize(1) canvasSize(2)]; 
                                 annulus.orientation = 0; 
                                 annulus.spatialFreq = 0;
+                                annulus.opacity = obj.specificOpacity(1,q,s);
                                 annulusA = uint8(obj.masks(:,:,q,s)*255);
                                 annulusMaskX = stage.core.Mask(annulusA);
                                 annulus.setMask(annulusMaskX);
@@ -507,8 +520,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % Identify screen size
 
             % Convert to pixels
-            centerSigmaPix = convertUnits(obj.rfSigmaCenter,'UM2PIX');
-            surroundSigmaPix = convertUnits(obj.rfSigmaSurround,'UM2PIX');
+            obj.preUnit = obj.rfSigmaCenter;
+            changeUnits(obj,'UM2PIX');
+            centerSigmaPix = obj.postUnit;
+            
+            obj.preUnit = obj.rfSigmaSurround;
+            changeUnits(obj,'UM2PIX');
+            surroundSigmaPix = obj.postUnit;
 
             % Generate 2D gaussians
             centerGaus = fspecial('gaussian',[canvasSize(2) canvasSize(1)],centerSigmaPix);
@@ -543,7 +561,10 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
 
             % Calculate trajectory size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            imgSize = convertUnits(canvasSize,'PIX2VH'); % VH units for all DOVES movies.
+            
+            obj.preUnit = canvasSize;
+            changeUnits(obj,'PIX2VH'); % VH units for all DOVES movies.
+            imgSize = obj.postUnit;
             
             % We want an even amount of pixels on each side of the trajectory.
             xLength = floor(imgSize(1) / 2);
@@ -588,7 +609,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2; % Evenly distributed (in VH)
             
             if obj.overrideRadiiLogical == true
-                radius = convertUnits(obj.overrideRadii,'PIX2VH'); % in VH pixels
+                obj.preUnit = obj.overrideRadii;
+                changeUnits(obj,'PIX2VH'); % in VH pixels
+                radius = obj.postUnit;
             end
                        
             if sum(obj.meanDisksLogical) > 0 % Check whether the whole trajectory is needed.
@@ -658,7 +681,9 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
             
             if obj.overrideRadiiLogical == true
-                radius = convertUnits(obj.overrideRadii,'PIX2VH'); % in VH pixels
+                obj.preUnit = obj.overrideRadii;
+                changeUnits(obj,'PIX2VH'); % in VH pixels
+                radius = obj.postUnit;
             end
             
             % Calculate angles to operate over
@@ -734,43 +759,40 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             end
         end
         
-        function output = convertUnits(input,type)
+        function changeUnits(obj,type)
             
             if strcmp(type,'UM2PIX')
                 % um / (um/pix) = pix
-                output = input ./ obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
+                obj.postUnit = obj.preUnit ./ obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
                 
             elseif strcmp(type,'PIX2UM')
                 % pix * (um/pix) = um
-                output = input .* obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
+                obj.postUnit = obj.preUnit .* obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
    
             elseif strcmp(type,'UM2VH')
                 % From DOVES database: 1 VH pixel = 1 arcmin = 3.3 um on monkey retina
                 % um / (3.3 um/VH) = VH
-                output = input ./ 3.3;
+                obj.postUnit = obj.preUnit ./ 3.3;
             
             elseif strcmp(type,'VH2UM')
                 % VH * (3.3 um/VH) = um
-                output = input .* 3.3;
+                obj.postUnit = obj.preUnit .* 3.3;
             
             elseif strcmp(type,'PIX2VH')
                 % (3.3 um/VH) / (um/pix) = pix/VH
                 ratio = 3.3 ./ obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
                 
                 % pix / (pix/VH) = VH
-                output = input ./ ratio;
-                
+                obj.postUnit = obj.preUnit ./ ratio;
+
             elseif strcmp(type,'VH2PIX')
                 % (3.3 um/VH) / (um/pix) = pix/VH
                 ratio = 3.3 ./ obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
                 
                 % VH * (pix/VH) = pix
-                output = input .* ratio;
-            
+                obj.postUnit = obj.preUnit .* ratio;
             else
-                
                 error('incorrect unit conversion.')
-                
             end
         end
         
@@ -810,7 +832,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                     obj.overrideRadii(1,a) = centerSize + (RFCoordinate .* annulusSize);
                 elseif obj.overrideRadii(1,a) <= 3
                     RFCoordinate = obj.overrideRadii(1,a) - 2;
-                    obj.overrideRadii(1,a) = annulusSize + (RFCoordinate .* surroundSize);
+                    obj.overrideRadii(1,a) = centerSize + annulusSize + (RFCoordinate .* surroundSize);
                 end
             end
         end

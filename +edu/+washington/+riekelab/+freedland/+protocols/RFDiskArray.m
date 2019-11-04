@@ -564,7 +564,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             
             obj.preUnit = canvasSize;
             changeUnits(obj,'PIX2VH'); % VH units for all DOVES movies.
-            imgSize = obj.postUnit;
+            imgSize = floor(obj.postUnit);
             
             % We want an even amount of pixels on each side of the trajectory.
             xLength = floor(imgSize(1) / 2);

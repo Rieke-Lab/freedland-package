@@ -64,6 +64,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         specificOpacity
         diskExpand
         diskOpacity
+        spatialFrequencyPx
         rfSizing
     end
 
@@ -154,7 +155,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             
             if ~strcmp(obj.trajectory,'natural') % Features any disk
                 
-                % Identify type of disks
+                % Identify type of disks.
                 obj.meanDisksLogical = zeros(1,obj.disks);
                 obj.meanDisksLogical(obj.meanDisks) = 1;
                 obj.meanDisks(obj.meanDisks == 0) = [];
@@ -162,7 +163,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 % Identify corresponding RF Filter
                 [RFFilter,obj.rfSizing] = calculateFilter(obj);
 
-                % Prepare trajectory with our RF Filter
+                % Prepare trajectory with our RF Filter.
                 [wTraj, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
                                 
                 % For an override, convert RF units into pixels.
@@ -362,7 +363,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                             annulus.position = canvasSize/2;
                             annulus.size = [canvasSize(1) canvasSize(2)]; 
                             annulus.orientation = 0; 
-                            annulus.spatialFreq = 0;
+                            annulus.spatialFreq = 1/obj.spatialFrequencyPx;
                             annulusA = uint8(obj.masks(:,:,q)*255);
                             annulusMaskX = stage.core.Mask(annulusA);
                             annulus.setMask(annulusMaskX);
@@ -422,7 +423,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                                 annulus.position = canvasSize/2;
                                 annulus.size = [canvasSize(1) canvasSize(2)]; 
                                 annulus.orientation = 0; 
-                                annulus.spatialFreq = 0;
+                                annulus.spatialFreq = 1/obj.spatialFrequencyPx;
                                 annulusA = uint8(obj.masks(:,:,q,s)*255);
                                 annulusMaskX = stage.core.Mask(annulusA);
                                 annulus.setMask(annulusMaskX);
@@ -560,11 +561,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             % In Stage, we will enlarge our image to fit the monitor.
             % For our calculations, we will do the opposite. By "shrinking" 
             % our monitor to fit the image, we improve computation time considerably.
-            m = imresize(RFFilter, [imgSize(2)+1 imgSize(1)+1]);
+            m = resize(RFFilter, [imgSize(1) imgSize(2)]);
             
             % Create trajectory  
-            w = zeros(imgSize(2)+1,imgSize(1)+1,1,length(obj.xTraj));
-            u = zeros(imgSize(2)+1,imgSize(1)+1,1,length(obj.xTraj));
+            w = zeros(imgSize(2),imgSize(1),1,length(obj.xTraj));
+            u = zeros(imgSize(2),imgSize(1),1,length(obj.xTraj));
             for a = 1:length(obj.xTraj)
                % Pull image
                u(:,:,1,a) = img(yRange(a,:),xRange(a,:)); 

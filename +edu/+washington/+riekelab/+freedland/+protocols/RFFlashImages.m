@@ -151,11 +151,11 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Calculate frame size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            imgSize = ceil(canvasSize / (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')));
+            imgSize = ceil(canvasSize / (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'))); % To DOVES VH unites
             xRange = floor(imgSize(1) / 2);
             yRange = floor(imgSize(2) / 2);
             
-            imageFrames = zeros(imgSize(2),imgSize(1),length(obj.imageNo)); % matrix with images
+            imageFrames = zeros(yRange.*2+1,xRange.*2+1,length(obj.imageNo)); % matrix with images
             backgroundIntensities = zeros(length(obj.imageNo),1);
             
             for a = 1:length(obj.imageNo) % Walk along our vectors
@@ -173,16 +173,9 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 xTraj = baseMovement.x(obj.frameNumber(a)) + fixMovement.x(obj.frameNumber(a));
                 yTraj = baseMovement.y(obj.frameNumber(a)) + fixMovement.y(obj.frameNumber(a));
                 
-                % While the rig automatically centers the stimulus, our
-                % calculation doesn't.
-                centering = obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset'); % in mu
-                centeringPix = centering ./ (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
-                centeredXTraj = round(xTraj - centeringPix(1));
-                centeredYTraj = round(yTraj + centeringPix(2));
-                
                 % create image
-                imageFrames(:,:,a) = img2(centeredYTraj-yRange:centeredYTraj+yRange-1,...
-                    centeredXTraj-xRange:centeredXTraj+xRange-1); 
+                imageFrames(:,:,a) = img2(yTraj-yRange:yTraj+yRange,...
+                    xTraj-xRange:xTraj+xRange); 
                 
                 R = imageFrames(:,:,a);
                 backgroundIntensities(a,1) = mean(R(:)) ./ 255;

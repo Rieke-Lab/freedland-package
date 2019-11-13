@@ -581,11 +581,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             % In Stage, we will enlarge our image to fit the monitor.
             % For our calculations, we will do the opposite. By "shrinking" 
             % our monitor to fit the image, we improve computation time considerably.
-            m = imresize(RFFilter, [imgSize(2)+1 imgSize(1)+1]);
+            m = imresize(RFFilter, [size(yRange,2) size(xRange,2)]);
             
             % Create trajectory  
-            w = zeros(imgSize(2)+1,imgSize(1)+1,1,length(obj.xTraj));
-            u = zeros(imgSize(2)+1,imgSize(1)+1,1,length(obj.xTraj));
+            w = zeros(size(yRange,2),size(xRange,2),1,length(obj.xTraj));
+            u = zeros(size(yRange,2),size(xRange,2),1,length(obj.xTraj));
             for a = 1:length(obj.xTraj)
                % Pull image
                u(:,:,1,a) = img(yRange(a,:),xRange(a,:)); 

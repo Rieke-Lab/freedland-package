@@ -12,7 +12,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         imageNo = 5; % natural image number (1 to 101), as a vector.
         observerNo = 1; % observer number (1 to 19). Can be a single value or vector.
         frameNumber = 200; % frame number according to DOVES database. Must be a vector.
-        presetVal = '1'; % can override image number and frame number using presets (if needed).
+        presetVal = '2'; % can override image number and frame number using presets (if needed).
         randomlyDisplay = true; % display images in a random order
 
         % Additional parameters
@@ -24,9 +24,6 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        meanIntegrationType = symphonyui.core.PropertyType('char', 'row', {'uniform','gaussian'})
-        overrideCoordinateType = symphonyui.core.PropertyType('char', 'row', {'pixels','RF'})
-        replacementImageType = symphonyui.core.PropertyType('char', 'row', {'disk array','null array'})
         presetValType = symphonyui.core.PropertyType('char', 'row', {'none','1','2'})
         backgroundIntensity
         imageDatabase
@@ -70,7 +67,7 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Catch common errors.
             if length(obj.imageNo) ~= length(obj.frameNumber)
-                error('The number of images and frames must be equivalent')
+                error('Each image must have a frame to show.')
             end
             
             if length(obj.imageNo) ~= length(obj.observerVector)
@@ -109,12 +106,12 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
             epoch.addParameter('micronsPerPixel',obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
             epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
-            epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in pixels
+            epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset'));
         end
         
         function p = createPresentation(obj)
             
-            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();             
+            canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % in normal pixels            
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
 
             A = obj.permut(obj.counter+1);
@@ -146,37 +143,37 @@ classdef RFFlashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             end
         end
         
-        % Apply RF Filter over the entire trajectory.
         function [imageFrames, backgroundIntensities] = findImage(obj)
             
             % Calculate frame size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            imgSize = ceil(canvasSize / (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'))); % To DOVES VH unites
+            imgSize = ceil(canvasSize / (3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'))); % Convert to DOVES VH units
             xRange = floor(imgSize(1) / 2);
             yRange = floor(imgSize(2) / 2);
             
-            imageFrames = zeros(yRange.*2+1,xRange.*2+1,length(obj.imageNo)); % matrix with images
+            imageFrames = zeros(yRange.*2+1,xRange.*2+1,length(obj.imageNo)); % Collection of images
             backgroundIntensities = zeros(length(obj.imageNo),1);
             
-            for a = 1:length(obj.imageNo) % Walk along our vectors
-                tempImage = obj.imageNo(a);
-                tempObserver = obj.observerVector(a);
+            for a = 1:length(obj.imageNo)
+                tempImage = obj.imageNo(a); % Pull image #
+                tempObserver = obj.observerVector(a); % Pull observer #
                 [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(tempImage, tempObserver,...
-                        'amplification', 1,'mirroring', true); % Pull coordinates of DOVES database
+                        'amplification', 1,'mirroring', true); % Pull coordinates from DOVES database
+                    
+                % Pull frame #
+                xTraj = baseMovement.x(obj.frameNumber(a)) + fixMovement.x(obj.frameNumber(a));
+                yTraj = baseMovement.y(obj.frameNumber(a)) + fixMovement.y(obj.frameNumber(a));
                 
                 % Scale pixels in image to monitor
                 img = pictureInformation.image;
                 img = (img./max(max(img)));              
-                img2 = img.*255;
-                            
-                % Produce trajectories
-                xTraj = baseMovement.x(obj.frameNumber(a)) + fixMovement.x(obj.frameNumber(a));
-                yTraj = baseMovement.y(obj.frameNumber(a)) + fixMovement.y(obj.frameNumber(a));
+                img2 = img.*255;      
                 
-                % create image
+                % Pull image
                 imageFrames(:,:,a) = img2(yTraj-yRange:yTraj+yRange,...
                     xTraj-xRange:xTraj+xRange); 
                 
+                % Identify global average
                 R = imageFrames(:,:,a);
                 backgroundIntensities(a,1) = mean(R(:)) ./ 255;
             end

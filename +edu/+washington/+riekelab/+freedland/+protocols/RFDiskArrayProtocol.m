@@ -6,6 +6,7 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
         runNo = 1
         firstRun = 1
         order
+        numberOfExperiments = 12; % How many stimuli to create and test (in total).
     end
     
     methods (Abstract)
@@ -17,41 +18,48 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
         function redefineSettings(obj,t)
             
             % t: whether to advance forward to the next setting (t/f).
-            
             if obj.firstRun == 1 
                 if obj.randomize == true
-                    obj.order = randperm(18);
+                    obj.order = randperm(obj.numberOfExperiments);
                 else
-                    obj.order = 1:18;
+                    obj.order = 1:obj.numberOfExperiments;
                 end
                 obj.firstRun = 0;
             end
             
-            % Predefined settings
-            possibleoverrideRadii = repmat([0 0.75 2 3],18,1);
-            possibleimageNo = [5 5 81 85 5 5 81 85 5 5 5 81 85 5 5 5 5 5]';
-            possibleoverrideCoordinate = repmat({'RF'},18,1);
-            possiblexSliceFrequency = [0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1]';
-            possibleySliceFrequency = [0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 2 0 1]';
-            possiblerotateSlices = [0 0 0 0 0 0 0 0 0 0 0 0 0 0 45 0 0 0]';
-            possibledisksIgnoreCut = [0 0; 0 0; 0 0; 0 0; 0 0; 0 0; 0 0; 0 0;...
-                2 3; 0 3; 0 0; 0 0; 0 0; 2 3; 2 3; 2 3; 0 0; 0 2];
-            possiblemeanDisks = [2 3 0; 1 0 0; 1 0 0; 1 0 0; 1 2 0; 1 2 3; 1 2 3; 1 2 3;...
-                1 2 3; 1 2 3; 1 2 3; 1 2 3; 1 2 3; 1 0 0; 1 0 0; 1 0 0; 1 3 0; 1 2 3];
-            possiblebackgroundDisks = [1 0 0; 2 3 0; 2 3 0; 2 3 0; 0 0 3; 0 0 0; 0 0 0; 0 0 0;...
-                0 0 0; 0 0 0; 0 0 0; 0 0 0; 0 0 0; 2 3 0; 2 3 0; 2 3 0; 2 0 0; 0 0 0];
+            % Each row represents a different stimulus.
+            possibleOverrideRadii = repmat([0 0.75 2 3],obj.numberOfExperiments,1);
+            possibleOverrideCoordinate = repmat({'RF'},obj.numberOfExperiments,1);
+            possibleImageNo = repelem(81,obj.numberOfExperiments,1);
+            possibleXSliceFrequency = [0 0 0 0 1 1 1 0 1 2 0 1]';
+            possibleYSliceFrequency = [0 0 0 0 1 1 1 1 1 2 0 1]';
+            possibleRotateSlices = repelem(0,obj.numberOfExperiments,1);
+            possibleDisksIgnoreCut = [0 0; 0 0; 0 0; 0 0; ...
+                                      2 3; 0 3; 0 0; ...
+                                      2 3; 2 3; 2 3; ...
+                                      0 0; 0 2];
+            possibleMeanDisks = [2 3 0; 1 0 0; 2 0 0; 3 0 0; ...
+                                 1 2 3; 1 2 3; 1 2 3;...
+                                 1 0 0; 1 0 0; 1 0 0;...
+                                 1 0 3; 1 2 3];
+            possibleBackgroundDisks = [1 0 0; 2 3 0; 3 0 0; 0 0 0; ...
+                                       0 0 0; 0 0 0; 0 0 0;...
+                                       2 3 0; 2 3 0; 2 3 0;...
+                                       2 0 0; 0 0 0];
+            % More information can be added from RFDiskArray as needed.
 
+            % Identify and assign parameters based on experiment #.
             runVal = obj.order(obj.runNo);
                 
-            obj.overrideRadii = possibleoverrideRadii(runVal,:);
-            obj.imageNo = possibleimageNo(runVal,:);
-            obj.overrideCoordinate = possibleoverrideCoordinate{runVal,1};
-            obj.xSliceFrequency = possiblexSliceFrequency(runVal,:);
-            obj.ySliceFrequency = possibleySliceFrequency(runVal,:);  
-            obj.rotateSlices = possiblerotateSlices(runVal,:);
-            obj.disksIgnoreCut = possibledisksIgnoreCut(runVal,:);
-            obj.meanDisks = possiblemeanDisks(runVal,:);
-            obj.backgroundDisks = possiblebackgroundDisks(runVal,:);
+            obj.overrideRadii       = possibleOverrideRadii(runVal,:);
+            obj.imageNo             = possibleImageNo(runVal,:);
+            obj.overrideCoordinate  = possibleOverrideCoordinate{runVal,1};
+            obj.xSliceFrequency     = possibleXSliceFrequency(runVal,:);
+            obj.ySliceFrequency     = possibleYSliceFrequency(runVal,:);  
+            obj.rotateSlices        = possibleRotateSlices(runVal,:);
+            obj.disksIgnoreCut      = possibleDisksIgnoreCut(runVal,:);
+            obj.meanDisks           = possibleMeanDisks(runVal,:);
+            obj.backgroundDisks     = possibleBackgroundDisks(runVal,:);
 
             if t == true
                 disp(obj.runNo);

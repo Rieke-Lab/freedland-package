@@ -845,7 +845,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         
         function tf = shouldContinuePreparingEpochs(obj)
             if obj.playSequence == true
-                tf = obj.numEpochsPrepared < obj.numberOfAverages*18;
+                tf = obj.numEpochsPrepared < obj.numberOfAverages*obj.numberOfExperiments;
             else
                 tf = obj.numEpochsPrepared < obj.numberOfAverages;
             end  
@@ -853,7 +853,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         
         function tf = shouldContinueRun(obj)
             if obj.playSequence == true
-                tf = obj.numEpochsCompleted < obj.numberOfAverages*18;
+                tf = obj.numEpochsCompleted < obj.numberOfAverages*obj.numberOfExperiments;
             else
                 tf = obj.numEpochsCompleted < obj.numberOfAverages;
             end

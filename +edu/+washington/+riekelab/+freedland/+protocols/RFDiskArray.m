@@ -62,7 +62,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         surroundMask
         theta
         specificOpacity
-        diskExpand
+        diskExpandRadius
+        diskExpandAngle
         diskOpacity
         rfSizing
         preUnit
@@ -185,7 +186,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 %%% define the space (in pixels) that masks will be placed over for our monitor.
                 
                 % Recalculate masks for pixels (instead of VH pixels).
-                obj.diskExpand = 0.5;   % expands disks by 0.005x to ensure overlap.   
+                obj.diskExpandRadius = 1;   % expands disks radially by percentage to ensure overlap.  
+                obj.diskExpandAngle = 0.5; % expands disks' angle coverage by percentage to ensure overlap.  
                 obj.diskOpacity = 1;    % opacity of disks placed. This is a good setting to play with during stimulus testing. (Matches pixels underneath).
                 
                 obj.preUnit = obj.radii;
@@ -213,8 +215,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                     obj.specificOpacity = ones(1,size(obj.masks,3)) .* obj.diskOpacity; % Will only place opaque masks
                     
                     for a = 1:size(obj.radii,2) - 1
-                        obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
-                            & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
+                        obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpandRadius/100))...
+                            & m <= (obj.radii(1,a+1).*(1+obj.diskExpandRadius/100));
                         if ismember(a,obj.naturalDisks) % If no disk...
                             obj.specificOpacity(1,a) = 0; % Make opacity zero. (Reveals natural image underneath).
                         end
@@ -226,18 +228,26 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                     obj.specificOpacity = ones(1,size(obj.masks,3),size(obj.masks,4)) .* obj.diskOpacity;
                     for a = 1:size(obj.radii,2) - 1
                         for b = 1:size(obj.theta,2) - 1
-                            dist = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
-                                & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
+                            dist = m >= (obj.radii(1,a).*(1-obj.diskExpandRadius/100))...
+                                & m <= (obj.radii(1,a+1).*(1+obj.diskExpandRadius/100));
                             th = k >= (obj.theta(1,b)) & k <= (obj.theta(1,b+1));
-                            
-                            if obj.theta(b+1) == 360 % Keeps pixels from leaking thru
-                                th = th + (k==0);
-                            end
-                            
-                            if obj.theta(b) == 180 % Keeps pixels from leaking thru
-                                th = th + (k==0);
-                            end
        
+                            % Add in disk expanding for radial coordinates
+                            expansionCoef = 360 * (obj.diskExpandAngle/100);
+                            expansionDisk1 = k >= (obj.theta(1,b) - expansionCoef) & k <= (obj.theta(1,b));
+                            expansionDisk2 = k <= (obj.theta(1,b+1) + expansionCoef) & k >= (obj.theta(1,b+1));
+                            
+                            % Special case
+                            if obj.theta(1,b) == 0
+                                expansionDisk1 = k >= (360 - expansionCoef) & k <= 360;
+                            end
+                            if obj.theta(1,b+1) == 360
+                                expansionDisk2 = k <= (0 + expansionCoef) & k >= 0;
+                            end
+                                
+                            % Add expanded angles to disk
+                            th = (th + expansionDisk1 + expansionDisk2) > 0;
+                            
                             % Ignore cuts in specific region
                             if ismember(a,obj.disksIgnoreCut)
                                 th = ones(size(k));
@@ -260,7 +270,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             % comparisons difficult. So, we build an mask to keep comparison controlled.
             [xx, yy] = meshgrid(1:2*canvasSize(1),1:2*canvasSize(2));
             m = sqrt((xx-canvasSize(1)).^2+(yy-canvasSize(2)).^2);
-            obj.surroundMask = m >= (max(obj.radii).*(1-obj.diskExpand/100));
+            obj.surroundMask = m >= (max(obj.radii).*(1-obj.diskExpandRadius/100));
             protectiveMask = zeros(2*canvasSize(2),2*canvasSize(1));
             protectiveMask(round(canvasSize(2) - ceil(canvasSize(2)/2) + 1) : round(canvasSize(2) + ceil(canvasSize(2)/2) - 1), ...
                 round(canvasSize(1) - ceil(canvasSize(1)/2)) + 1 : round(canvasSize(1) + ceil(canvasSize(1)/2)) - 1) = 1;

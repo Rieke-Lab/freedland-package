@@ -229,6 +229,14 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                             dist = m >= (obj.radii(1,a).*(1-obj.diskExpand/100))...
                                 & m <= (obj.radii(1,a+1).*(1+obj.diskExpand/100));
                             th = k >= (obj.theta(1,b)) & k <= (obj.theta(1,b+1));
+                            
+                            if obj.theta(b+1) == 360 % Keeps pixels from leaking thru
+                                th = th + (k==0);
+                            end
+                            
+                            if obj.theta(b) == 180 % Keeps pixels from leaking thru
+                                th = th + (k==0);
+                            end
        
                             % Ignore cuts in specific region
                             if ismember(a,obj.disksIgnoreCut)

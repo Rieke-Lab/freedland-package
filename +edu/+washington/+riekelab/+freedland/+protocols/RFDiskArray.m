@@ -375,8 +375,14 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             p.addStimulus(scene);
             p.addController(scenePosition);
 
-            sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
-                @(state)rem(state.time,cycleTime) >= obj.preTime * 1e-3 && rem(state.time,cycleTime) < (obj.preTime + obj.stimTime) * 1e-3);
+            if sum(obj.naturalDisks) > 0
+                % Repeat naturalistic stimulus underneath masks
+                sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
+                    @(state)rem(state.time,cycleTime) >= obj.preTime * 1e-3 && rem(state.time,cycleTime) < (obj.preTime + obj.stimTime) * 1e-3);
+            else
+                sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
+                    @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
+            end
             p.addController(sceneVisible);
 
             %%%%%% Apply masks %%%%%% 

@@ -186,8 +186,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 %%% define the space (in pixels) that masks will be placed over for our monitor.
                 
                 % Recalculate masks for pixels (instead of VH pixels).
-                obj.diskExpandRadius = 1;   % expands disks radially by percentage to ensure overlap.  
-                obj.diskExpandAngle = 0.5; % expands disks' angle coverage by percentage to ensure overlap.  
+                obj.diskExpandRadius = 0.5;   % expands disks radially by percentage to ensure overlap.  
+                obj.diskExpandAngle = 0; % expands disks' angle coverage by percentage to ensure overlap.  
                 obj.diskOpacity = 1;    % opacity of disks placed. This is a good setting to play with during stimulus testing. (Matches pixels underneath).
                 
                 obj.preUnit = obj.radii;

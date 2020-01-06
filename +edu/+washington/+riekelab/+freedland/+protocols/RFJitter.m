@@ -34,6 +34,8 @@ classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         flippedImageMatrix
         selection
         timeTraj
+        counter
+        doubleCounter
     end
 
     methods
@@ -74,17 +76,18 @@ classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.xTraj(:,a) = baseMovement.x + fixMovement.x;
                 obj.yTraj(:,a) = baseMovement.y + fixMovement.y;
             end
-            
+
             % We do not need to consider the entire trajectory, however.
             frames = round((obj.stimTime + 50) / 1000 * 200); % max # of frames in DOVES database, with 50ms cushion
-            if size(obj.xTraj,2) <= frames
-                frames = size(obj.xTraj,2);
+
+            if size(obj.xTraj,1) <= frames
+                frames = size(obj.xTraj,1);
             end
             
-            obj.xTraj = obj.xTraj(1,1:frames);
-            obj.yTraj = obj.yTraj(1,1:frames);
+            obj.xTraj = obj.xTraj(1:frames,:);
+            obj.yTraj = obj.yTraj(1:frames,:);
             obj.flippedxTraj = abs(obj.xTraj - size(obj.imageMatrix,2)); % Mirror x coordinates
-            obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % DOVES resolution
+            obj.timeTraj = (0:(size(obj.xTraj,1)-1)) ./ 200; % DOVES resolution
                 
             % Scale image pixels to monitor
             img = pictureInformation.image;
@@ -109,6 +112,8 @@ classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             else
                 obj.sequence = randperm(length(obj.fixationIntensity));
             end
+            obj.counter = 1;
+            obj.doubleCounter = 1;
         end
         
         function prepareEpoch(obj, epoch)
@@ -118,7 +123,7 @@ classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             duration = (obj.preTime + obj.stimTime + obj.tailTime)*2 / 1e3;
             
             % Find appropriate stimulus
-            A = obj.sequence(obj.numEpochsCompleted + 1);
+            A = obj.sequence(obj.counter);
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
@@ -141,7 +146,7 @@ classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             p.setBackgroundColor(obj.backgroundIntensity)
             
             % Find corresponding experiment
-            obj.selection = obj.sequence(obj.numEpochsCompleted + 1);
+            obj.selection = obj.sequence(obj.counter);
             
             % Base image
             scene = stage.builtin.stimuli.Image(obj.imageMatrix);
@@ -160,32 +165,26 @@ classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             scene.setMagFunction(GL.LINEAR);
             sceneMirrored.setMinFunction(GL.LINEAR);
             sceneMirrored.setMagFunction(GL.LINEAR);
-            
+
             % Program each scene
             cycleTime = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             scenePosition = stage.builtin.controllers.PropertyController(scene,...
-                'position', @(state)getScenePosition(obj, state.time - obj.preTime/1e3, p0, false));
+                'position', @(state)getScenePosition(obj, state.time - obj.preTime/1e3, p0, obj.xTraj(:,obj.selection)));
             mirroredPosition = stage.builtin.controllers.PropertyController(sceneMirrored,...
-                'position', @(state)getScenePosition(obj, state.time - obj.preTime - cycleTime, p0, true));
-            
-            function p = getScenePosition(obj, time, p0, mirrored)
+                'position', @(state)getScenePosition(obj, state.time - obj.preTime/1e3 - cycleTime, p0, obj.flippedxTraj(:,obj.selection)));
+
+            function p = getScenePosition(obj, time, p0, xTraj)
                 
-                % Select corresponding x-coordinates
-                if mirrored == false
-                    xTrajectory = obj.xTraj(:,obj.selection);
-                else
-                    xTrajectory = obj.flippedxTraj(:,obj.selection);
-                end
-                yTrajectory = obj.yTraj(:,obj.selection);
+                yTraject = obj.yTraj(:,obj.selection);
                 
                 if time <= 0
                     p = p0;
                 elseif time > obj.timeTraj(end) % Beyond eye trajectory, hang on last frame
-                    p(1) = p0(1) + xTrajectory(end);
-                    p(2) = p0(2) + yTrajectory(end);
+                    p(1) = p0(1) + xTraj(end);
+                    p(2) = p0(2) + yTraject(end);
                 else % Within eye trajectory and stim time
-                    dx = interp1(obj.timeTraj,xTrajectory,time);
-                    dy = interp1(obj.timeTraj,yTrajectory,time);
+                    dx = interp1(obj.timeTraj,xTraj,time);
+                    dy = interp1(obj.timeTraj,yTraject,time);
                     p(1) = p0(1) + dx;
                     p(2) = p0(2) + dy;
                 end
@@ -199,19 +198,26 @@ classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
                     @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
-            sceneMirroredVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
-                    @(state)state.time >= (obj.preTime+cycleTime) * 1e-3 && state.time < (obj.preTime + obj.stimTime+cycleTime) * 1e-3);
+            sceneMirroredVisible = stage.builtin.controllers.PropertyController(sceneMirrored, 'visible', ...
+                    @(state)state.time >= (obj.preTime) * 1e-3 + cycleTime && state.time < (obj.preTime + obj.stimTime) * 1e-3 + cycleTime);
             
             p.addController(sceneVisible);
             p.addController(sceneMirroredVisible);
+            
+            if (obj.doubleCounter - 1) == obj.numberOfAverages
+                obj.doubleCounter = 1;
+                obj.counter = obj.counter + 1;
+            else
+                obj.doubleCounter = obj.doubleCounter + 1;
+            end
         end
 
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.imageNo);
+            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.fixationIntensity);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.imageNo);
+            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.fixationIntensity);
         end
     end
 end

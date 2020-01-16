@@ -63,9 +63,7 @@ classdef RFWeightingFigure < symphonyui.core.FigureHandler
             if strcmp(obj.type,'center sigma')
                 currentSpotSize = epoch.parameters('specificCenterSigma');
             else
-                currentSpotSize = epoch.parameters('specificAnnulusSize');
-            end
-            
+                currentSpotSize = 
             prePts = sampleRate*obj.preTime/1000;
             stimPts = sampleRate*obj.stimTime/1000;
             preScaleFactor = stimPts / prePts;

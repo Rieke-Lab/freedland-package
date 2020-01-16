@@ -9,7 +9,7 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         centerSigma = [10,20,30,40,50,60,70,80,90,100] % in um
         annulusSize = [30,40,50,60,70,80,90,100] % in um
         maxLightLevel = 0.168; % maximum light intensity we encounter (0-1)
-        randomizeOrder = true
+        randomizeOrder = false
         onlineAnalysis = 'none'
         numberOfAverages = uint16(2) % number of epochs to queue
         amp % Output amplifier
@@ -23,10 +23,10 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         annulusSizeSequence
         centerSigmaSelectionIndex
         annulusSizeSelectionIndex
+
         backgroundIntensity
         spotIntensity
         imageMatrix
-        trials
     end
     
     properties (Hidden, Transient)
@@ -60,11 +60,9 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             if length(obj.centerSigmaSequence) > 1
                 obj.showFigure('edu.washington.riekelab.freedland.figures.RFWeightingFigure',...
                 obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','center sigma');
-                obj.trials = length(obj.centerSigmaSequence);
             else
                 obj.showFigure('edu.washington.riekelab.freedland.figures.RFWeightingFigure',...
                 obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','annulus size');
-                obj.trials = length(obj.annulusSizeSequence);
             end
             
             if obj.randomizeOrder == true
@@ -117,10 +115,9 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             scene.setMagFunction(GL.LINEAR);
             
             obj.centerSigmaSelectionIndex = mod(obj.centerSigmaSelectionIndex + 1,length(obj.centerSigma));
-            obj.annulusSizeSelectionIndex = mod(obj.annulusSizeSelectionIndex + 1,length(obj.annulusSize));
+            obj.annulusSizeSelectionIndex = mod(obj.annulusSizeSelectionIndex + 1,length(obj.centerSigma));
 
-            obj.currentCenterSigma = obj.centerSigmaSequence(obj.centerSigmaSelectionIndex+1);
-            obj.currentAnnulusSize = obj.annulusSizeSequence(obj.annulusSizeSelectionIndex+1);
+            obj.currentFactor = obj.sequence(obj.selectionIndex);
         end
 
         function lightLevelFilter = calculateFilter(obj)
@@ -156,11 +153,11 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
    
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < (obj.numberOfAverages*obj.trials);
+            tf = obj.numEpochsPrepared < (obj.numberOfAverages*size(obj.centerSigmaSequence,2));
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < (obj.numberOfAverages*obj.trials);
+            tf = obj.numEpochsCompleted < (obj.numberOfAverages*size(obj.centerSigmaSequence,2));
         end
         
     end

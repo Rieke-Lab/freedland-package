@@ -31,6 +31,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         meanDisks = [1 2 3]; % starting from the center disk and moving outwards, which disks should be averaged?
         naturalDisks = [0 0];  % starting from the center disk and moving outwards, which disks should remain a natural image?
         backgroundDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be left at background intensity?
+        switchDisks = [0 0]; % starting from the center disk and moving outwards, which disks should switch intensity based on fixation?
         meanIntegration = 'gaussian'; % type of linear integration
         
         % For sequence
@@ -68,6 +69,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         rfSizing
         preUnit
         postUnit
+        switchTraj
     end
 
     methods
@@ -141,6 +143,24 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             % Produce trajectories
             obj.xTraj = baseMovement.x + fixMovement.x;
             obj.yTraj = baseMovement.y + fixMovement.y;
+            
+            % Establish switching intensities
+            if sum(obj.switchDisks) > 0
+                saccades = find(pictureInformation.saccadeTracking==1);
+                switchLocations = double(diff(saccades) > 1) .* saccades(2:end);
+                switchLocations(switchLocations == 0) = [];
+                switchLocations = [1 switchLocations length(obj.xTraj)];
+                
+                intensities = [0 obj.backgroundIntensity.*2]; % [min, max] intensity between disks
+                
+                obj.switchTraj = zeros(length(obj.xTraj));
+                
+                counter = 0;
+                for a = 1:length(switchLocations)-1
+                    obj.switchTraj(switchLocations(a):switchLocations(a+1)) = intensities(counter+1);
+                    counter = mod(counter+1,2);
+                end
+            end
             
             % We do not need to consider the entire trajectory, however.
             frames = round((obj.stimTime + 50) / 1000 * 200); % max # of frames in DOVES database, with 50ms cushion
@@ -417,6 +437,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                                     annulus.color = obj.backgroundIntensity * 2;  % Natively halves value for contrast resolution.
                                     p.addStimulus(annulus);
                                     
+                                elseif ismember(q,obj.switchDisks)
+                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                    'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, obj.switchTraj));
+                                    annulus.contrast = 0; % No contrast
+                                    p.addStimulus(annulus); % Add stimulus
+                                    p.addController(annulusLED); % Add disk
+                                    
                                 end
                                 
                                 % Only allow the scene to be visible at the exact time.
@@ -439,6 +466,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                                     annulus.contrast = 0;
                                     annulus.color = obj.backgroundIntensity * 2; % natively halves value for contrast resolution.
                                     p.addStimulus(annulus);
+                                    
+                                elseif ismember(q,obj.switchDisks)
+                                    annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                    'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, obj.switchTraj));
+                                    annulus.contrast = 0; % No contrast
+                                    p.addStimulus(annulus); % Add stimulus
+                                    p.addController(annulusLED); % Add disk
                                 end
 
                                 % Only allow the scene to be visible at the exact time.
@@ -480,6 +514,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                                         annulus.contrast = 0;
                                         annulus.color = obj.backgroundIntensity * 2;  % natively halves value for contrast resolution.
                                         p.addStimulus(annulus);
+                                        
+                                    elseif ismember(q,obj.switchDisks)
+                                        annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - obj.preTime/1e3, obj.switchTraj));
+                                        annulus.contrast = 0; % No contrast
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLED); % Add disk    
                                     end
 
                                     % Only allow the scene to be visible at the exact time.
@@ -502,6 +543,13 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                                         annulus.contrast = 0;
                                         annulus.color = obj.backgroundIntensity * 2;  % natively halves value for contrast resolution.
                                         p.addStimulus(annulus);
+                                        
+                                    elseif ismember(q,obj.switchDisks)
+                                        annulusLED = stage.builtin.controllers.PropertyController(annulus,...
+                                        'color', @(state)getBackground(obj, state.time - cycleTime - obj.preTime/1e3, obj.switchTraj));
+                                        annulus.contrast = 0; % No contrast
+                                        p.addStimulus(annulus); % Add stimulus
+                                        p.addController(annulusLED); % Add disk
                                     end
 
                                     % Only allow the scene to be visible at the exact time.

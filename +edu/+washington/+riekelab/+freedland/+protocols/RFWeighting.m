@@ -23,6 +23,8 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         annulusSizeSequence
         centerSigmaSelectionIndex
         annulusSizeSelectionIndex
+        currentCenterSigma
+        currentAnnulusSize
         backgroundIntensity
         spotIntensity
         imageMatrix
@@ -74,8 +76,8 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             obj.centerSigmaSelectionIndex = 0;
             obj.annulusSizeSelectionIndex = 0;
-            obj.currentCenterSigma = obj.centerSigmaSequence(obj.selectionIndex+1);
-            obj.currentAnnulusSize = obj.annulusSizeSequence(obj.selectionIndex+1);
+            obj.currentCenterSigma = obj.centerSigmaSequence(obj.centerSigmaSelectionIndex+1);
+            obj.currentAnnulusSize = obj.annulusSizeSequence(obj.annulusSizeSelectionIndex+1);
         end
         
         function prepareEpoch(obj, epoch)
@@ -150,9 +152,10 @@ classdef RFWeighting < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             if strcmp(obj.cellClass,'OFF')
                 lightLevelFilter = abs(lightLevelFilter - obj.maxLightLevel); % Complementary
+                obj.backgroundIntensity = obj.maxLightLevel;
+            else
+                obj.backgroundIntensity = 0;
             end
-            
-            obj.backgroundIntensity = mean(lightLevelFilter(:));
         end
    
         function tf = shouldContinuePreparingEpochs(obj)

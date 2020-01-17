@@ -6,7 +6,7 @@ classdef RFWeightingFigure < symphonyui.core.FigureHandler
         ampDevice
         preTime
         stimTime
-        annulusSize
+        type
     end
     
     properties (Access = private)

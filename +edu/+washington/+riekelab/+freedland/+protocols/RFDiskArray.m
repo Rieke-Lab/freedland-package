@@ -104,7 +104,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
 
             % Catch common errors.
             checkDisks = sum(1:obj.disks);
-            checkAssignments = sum([obj.meanDisks obj.naturalDisks obj.backgroundDisks]);
+            checkAssignments = sum([obj.meanDisks obj.switchDisks obj.naturalDisks obj.backgroundDisks]);
             if sum(obj.overrideRadii) > 0
                 obj.overrideRadiiLogical = true; % Identifier for later on
                 checkDisks = sum(1:size(obj.overrideRadii,2)-1);
@@ -153,7 +153,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 
                 intensities = [0 obj.backgroundIntensity.*2]; % [min, max] intensity between disks
                 
-                obj.switchTraj = zeros(length(obj.xTraj));
+                obj.switchTraj = zeros(1,length(obj.xTraj));
                 
                 counter = 0;
                 for a = 1:length(switchLocations)-1
@@ -338,6 +338,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 epoch.addParameter('specificDisksIgnoreCut', obj.disksIgnoreCut);
                 epoch.addParameter('specificMeanDisks', obj.meanDisks);
                 epoch.addParameter('specificBackgroundDisks', obj.backgroundDisks);
+                epoch.addParameter('specificNaturalDisks', obj.naturalDisks);
+                epoch.addParameter('specificSwitchDisks', obj.switchDisks);
             else
                 epoch.addParameter('backgroundIntensity', obj.backgroundIntensity); % not accurate for sequence
             end
@@ -577,7 +579,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             % Match mask color to linear equivalency in real time.
             function s = getBackground(obj, time, equivalency)
                 if time < 0
-                    s = obj.backgroundIntensity;
+                    s = obj.backgroundIntensity .* 2;
                 elseif time > obj.timeTraj(end)
                     s = equivalency(1,end) * 2; % Hold last color
                 else

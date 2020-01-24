@@ -70,6 +70,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         preUnit
         postUnit
         switchTraj
+        switchTrajOrder = 0
     end
 
     methods
@@ -151,7 +152,11 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 switchLocations(switchLocations == 0) = [];
                 switchLocations = [1 switchLocations length(obj.xTraj)];
                 
-                intensities = [0 obj.backgroundIntensity.*2]; % [min, max] intensity between disks
+                if obj.switchTrajOrder == 0
+                    intensities = [0 obj.backgroundIntensity.*2]; % [min, max] intensity between disks
+                elseif obj.switchTrajOrder == 1
+                    intensities = [obj.backgroundIntensity.*2 0]; % swap order
+                end
                 
                 obj.switchTraj = zeros(1,length(obj.xTraj));
                 
@@ -160,6 +165,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                     obj.switchTraj(switchLocations(a):switchLocations(a+1)) = intensities(counter+1);
                     counter = mod(counter+1,2);
                 end
+                
+                obj.switchTrajOrder = mod(obj.switchTrajOrder + 1,2);
             end
             
             % We do not need to consider the entire trajectory, however.

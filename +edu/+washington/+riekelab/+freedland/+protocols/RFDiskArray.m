@@ -70,8 +70,8 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         preUnit
         postUnit
         switchTraj
-        switchTrajOrder = 0
         intensities
+        switchVal
     end
 
     methods
@@ -148,14 +148,14 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
             
             % Establish switching intensities
             if sum(obj.switchDisks) > 0
-                saccades = find(pictureInformation.saccadeTracking==1);
+                saccades = find(pictureInformation.saccadeTracking == 1);
                 switchLocations = double(diff(saccades) > 1) .* saccades(2:end);
                 switchLocations(switchLocations == 0) = [];
                 switchLocations = [1 switchLocations length(obj.xTraj)];
                 
-                if obj.switchTrajOrder == 0
+                if obj.switchVal == 1
                     obj.intensities = [0 obj.backgroundIntensity.*2]; % [min, max] intensity between disks
-                elseif obj.switchTrajOrder == 1
+                elseif obj.switchVal == 2
                     obj.intensities = [obj.backgroundIntensity.*2 0]; % swap order
                 end
                 
@@ -166,8 +166,6 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                     obj.switchTraj(switchLocations(a):switchLocations(a+1)) = obj.intensities(counter+1);
                     counter = mod(counter+1,2);
                 end
-                
-                obj.switchTrajOrder = mod(obj.switchTrajOrder + 1,2);
             else
                 obj.intensities = [0 0];
             end

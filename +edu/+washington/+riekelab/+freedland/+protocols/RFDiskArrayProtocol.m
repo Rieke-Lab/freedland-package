@@ -67,6 +67,10 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
                                  0 0 3 0; 0 0 3 0; 0 2 0 0; 0 2 0 0;...
                                  0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 0;...
                                  0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 0];
+            possibleSwitchVals = [0 0 0,...
+                                 1 2 1 2,...
+                                 0 0 0 0,...
+                                 0 0 0 0];
             % More information can be added from RFDiskArray as needed.
 
             % Identify and assign parameters based on experiment #.
@@ -82,6 +86,7 @@ classdef (Abstract) RFDiskArrayProtocol < edu.washington.riekelab.protocols.Riek
             obj.backgroundDisks     = possibleBackgroundDisks(runVal,:);
             obj.naturalDisks        = possibleNaturalDisks(runVal,:);
             obj.switchDisks         = possibleSwitchDisks(runVal,:);
+            obj.switchVal           = possibleSwitchVals(runVal);
 
             if t == true
                 disp(obj.runNo);

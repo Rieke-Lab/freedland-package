@@ -70,7 +70,6 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         preUnit
         postUnit
         switchTraj
-        intensities
         switchVal
     end
 
@@ -154,20 +153,18 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 switchLocations = [1 switchLocations length(obj.xTraj)];
                 
                 if obj.switchVal == 1
-                    obj.intensities = [0 obj.backgroundIntensity.*2]; % [min, max] intensity between disks
+                    intensities = [0 obj.backgroundIntensity.*2]; % [min, max] intensity between disks
                 elseif obj.switchVal == 2
-                    obj.intensities = [obj.backgroundIntensity.*2 0]; % swap order
+                    intensities = [obj.backgroundIntensity.*2 0]; % swap order
                 end
                 
                 obj.switchTraj = zeros(1,length(obj.xTraj));
                 
                 counter = 0;
                 for a = 1:length(switchLocations)-1
-                    obj.switchTraj(switchLocations(a):switchLocations(a+1)) = obj.intensities(counter+1);
+                    obj.switchTraj(switchLocations(a):switchLocations(a+1)) = intensities(counter+1);
                     counter = mod(counter+1,2);
                 end
-            else
-                obj.intensities = [0 0];
             end
             
             % We do not need to consider the entire trajectory, however.
@@ -348,7 +345,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
                 epoch.addParameter('specificBackgroundDisks', obj.backgroundDisks);
                 epoch.addParameter('specificNaturalDisks', obj.naturalDisks);
                 epoch.addParameter('specificSwitchDisks', obj.switchDisks);
-                epoch.addParameter('switchDisksIntensity', obj.intensities);
+                epoch.addParameter('switchDisksMarker', obj.switchVal);
             else
                 epoch.addParameter('backgroundIntensity', obj.backgroundIntensity); % not accurate for sequence
             end

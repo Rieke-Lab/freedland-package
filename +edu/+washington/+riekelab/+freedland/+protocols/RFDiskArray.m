@@ -40,7 +40,7 @@ classdef RFDiskArray < edu.washington.riekelab.freedland.protocols.RFDiskArrayPr
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(5) % number of epochs to queue
+        numberOfAverages = uint16(8) % number of epochs to queue
         amp % Output amplifier
     end
     

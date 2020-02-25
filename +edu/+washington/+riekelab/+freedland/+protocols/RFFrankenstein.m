@@ -128,7 +128,9 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             toc
             
             % Search along set of reference images
+            tic
             unwImageFrames = findImage(obj);
+            toc
             
             % Convolve each image with cell's filter
             wimageFrames = zeros(size(unwImageFrames));
@@ -659,7 +661,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
         end
         
         function imageFrames = findImage(obj)
-            
+
             % Pull information for all fixations in DOVES database
             load('+edu/+washington/+riekelab/+freedland/+images/fixationDatabase.mat')
             A = unique(imageNumber);
@@ -678,6 +680,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             imageFrames = zeros(yRange.*2+1,xRange.*2+1,1,length(imageNumber)); % Collection of images
             counter = 1;
             
+            tic
             for a = 1:length(A)
                 tempImage = imageNumber(A(a)); % Pull image #
                 [path, outputPicture] = edu.washington.riekelab.freedland.scripts.quickPullDOVES(tempImage, 1,...
@@ -693,8 +696,8 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
                 for b = 1:length(frames)
 
                     % Pull frame #
-                    x = path.x(b);
-                    y = path.y(b);
+                    x = path.x(frames(b));
+                    y = path.y(frames(b));
 
                     % Pull image
                     imageFrames(:,:,1,counter) = img2(y-yRange:y+yRange,...
@@ -702,6 +705,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
                     counter = counter + 1;
                 end
             end
+            toc
             
             order = randperm(length(frameNumber)); % Randomly order
             imageFrames = imageFrames(:,:,1,order);

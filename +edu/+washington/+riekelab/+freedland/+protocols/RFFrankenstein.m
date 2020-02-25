@@ -30,10 +30,6 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
         switchDisks = [0 0]; % starting from the center disk and moving outwards, which disks should switch intensity based on fixation?
         meanIntegration = 'gaussian'; % type of linear integration
         
-        % For sequence
-        playSequence = true; % plays a predefined sequence of protocols
-        randomize = true; % plays sequence of protocols in random order
-        
         % Additional parameters
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(8) % number of epochs to queue
@@ -79,7 +75,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
             
             % Must have prerender set to avoid lagging through the replacement trajectory.     
-            if ~strcmp(obj.trajectory,'natural') && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
+            if obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
                 error('Must have prerender set') 
             end
 
@@ -91,7 +87,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
                         
             % Pull base trajectories and image information.
             [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage, 1,...
-                    'amplification', obj.amplification,'mirroring', true);
+                    'amplification', 1,'mirroring', true);
                 
             % Scale image pixels to monitor
             img = pictureInformation.image;
@@ -115,23 +111,22 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             [RFFilter,obj.rfSizing] = calculateFilter(obj);
 
             % Prepare trajectory with our RF Filter
-            [wTraj, unwTraj, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
+            [wTraj, ~, RFFilterVH] = weightedTrajectory(obj, img2, RFFilter);
 
             % For an override, convert RF units into pixels.
-            if strcmp(obj.overrideCoordinate,'RF') && obj.overrideRadiiLogical == true                   
+            if strcmp(obj.overrideCoordinate,'RF')               
                 RFConversion(obj)
             end
 
             % Calculate different disk statistics (all in VH units)
             tic
             if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
-                [obj.linear, obj.radii] = linearEquivalency(obj, wTraj, unwTraj, RFFilterVH);
+                [obj.linear, obj.radii] = linearEquivalency(obj, wTraj, RFFilterVH);
             else
-                [obj.linear, obj.radii, obj.theta] = linearEquivalencySliced(obj, wTraj, unwTraj, RFFilterVH);
+                [obj.linear, obj.radii, obj.theta] = linearEquivalencySliced(obj, wTraj, RFFilterVH);
             end
             toc
             
-            keyboard
             % Search along set of reference images
             unwImageFrames = findImage(obj);
             
@@ -144,11 +139,13 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             % Calculate statistics
             tic
             if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
-                [obj.linear, ~] = linearEquivalency(obj, wimageFrames, unwImageFrames, RFFilterVH);
+                [linearSpace, ~] = linearEquivalency(obj, wimageFrames, RFFilterVH);
             else
-                [obj.linear, ~, ~] = linearEquivalencySliced(obj, wimageFrames, unwImageFrames, RFFilterVH);
+                [linearSpace, ~, ~] = linearEquivalencySliced(obj, wimageFrames, RFFilterVH);
             end
             toc
+            
+            % 
             
             buildMasksMonitor(obj) % Build relevant masks for monitor
             
@@ -526,7 +523,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
         end
         
         % Calculate linear equivalency without slices
-        function [q, radius] = linearEquivalency(obj, wTraj, unwTraj, RFFilterVH)
+        function [q, radius] = linearEquivalency(obj, wTraj, RFFilterVH)
             
             q = zeros(obj.disks,size(wTraj,4));
             imgSize = [size(wTraj,1) size(wTraj,2)];
@@ -543,56 +540,37 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
                 changeUnits(obj,'PIX2VH'); % in VH pixels
                 radius = obj.postUnit;
             end
-                       
-            if sum(obj.meanDisksLogical) > 0 % Check whether the whole trajectory is needed.
-                
-                % Calculate statistics
-                for a = 1:size(radius,2) - 1
-                    if obj.meanDisksLogical(1,a) > 0 % Only regions where we absolutely need to calculate (speed increase)
-                        
-                        filt = m >= radius(1,a) & m <= radius(1,a+1); % Logical mask (VH coordinates)
-                        regionSize = sum(filt(:)); % Total number of pixels
-                        
-                        if regionSize < minimumPixels % Not enough pixels to continue
-                            error('Not enough pixels in region. Please change mask radii.')
-                        end
 
-                        if strcmp(obj.meanIntegration,'gaussian')
-                            T = RFFilterVH .* filt;             % Individual region's RF
-                            R = sum(T(:)) / regionSize * 255;   % Normalizing factor for region
-                        end
+            % Calculate statistics
+            for a = 1:size(radius,2) - 1
+                if ismember(a,obj.meanDisks) % Only regions where we absolutely need to calculate (speed increase)
 
-                        % Apply filter across full trajectory.
-                        for n = 1:size(wTraj,4)
-                            
-                            if obj.meanDisksLogical(1,a) == 1 % Disk belongs
-                                
-                                if strcmp(obj.meanIntegration,'gaussian')
-                                    S = wTraj(:,:,1,n) .* filt;     % RF weighted trajectory
-                                else
-                                    S = unwTraj(:,:,1,n) .* filt;   % Unweighted trajectory
-                                end
-                                
-                                if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
-                                    S = 0;
-                                end
-                                
-                                if strcmp(obj.meanIntegration,'gaussian')
-                                    q(a,n) = sum(S(:)) / (regionSize  * R);     % Renormalize
-                                else
-                                    q(a,n) = sum(S(:)) / (regionSize * 255);    % Raw average
-                                end
-                                
-                            end
+                    filt = m >= radius(1,a) & m <= radius(1,a+1); % Logical mask (VH coordinates)
+                    regionSize = sum(filt(:)); % Total number of pixels
 
+                    if regionSize < minimumPixels % Not enough pixels to continue
+                        error('Not enough pixels in region. Please change mask radii.')
+                    end
+
+                    T = RFFilterVH .* filt;             % Individual region's RF
+                    R = sum(T(:)) / regionSize * 255;   % Normalizing factor for region
+
+                    % Apply filter across full trajectory.
+                    for n = 1:size(wTraj,4)
+
+                        S = wTraj(:,:,1,n) .* filt;     % RF weighted trajectory
+
+                        if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                            S = 0;
                         end
+                        q(a,n) = sum(S(:)) / (regionSize  * R);     % Renormalize
                     end
                 end
             end
         end
         
         % Calculate linear equivalency with slices
-        function [q, radius, theta] = linearEquivalencySliced(obj, wTraj, unwTraj, RFFilterVH)
+        function [q, radius, theta] = linearEquivalencySliced(obj, wTraj, RFFilterVH)
             
             imgSize = [size(wTraj,1) size(wTraj,2)];
             minimumPixels = 8; % minimum amount of pixels for us to get a reasonable statistic.
@@ -606,7 +584,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             k = abs(k - 90);                                      % Rotate for proper polar coordinates
             k(1:floor(imgSize(1)/2),:) = k(1:floor(imgSize(1)/2),:) + 180;
             
-            k = mod(k - obj.rotateSlices,360); % Rotate accordingly
+            k = mod(k,360); % Rotate accordingly
 
             radius = [0 cumsum(repelem(max(imgSize)/(obj.disks),1,(obj.disks)))] ./ 2;
             
@@ -635,54 +613,45 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             
             q = zeros(obj.disks,size(theta,2)-1,size(wTraj,4)); % in form [disk #, angle, mean value]
             
-            if sum(obj.meanDisksLogical) > 0 % Check whether the whole trajectory is needed.
-                % Calculate statistics
-                for a = 1:size(radius,2) - 1
-                    for b = 1:size(theta,2) - 1
-                        if obj.meanDisksLogical(1,a) > 0 % Only regions where we absolutely need to calculate (speed increase)
-                            radiusFilt = m >= radius(1,a) & m <= radius(1,a+1); % Radial filter (r)
-                            angFilt = k >= theta(1,b) & k <= theta(1,b+1); % Angular filter (theta)
+            % Calculate statistics
+            for a = 1:size(radius,2) - 1
+                for b = 1:size(theta,2) - 1
+                    placeDisk = true;
+                    if ismember(a,obj.meanDisks) % Only regions where we absolutely need to calculate (speed increase)
 
-                            if ismember(a,obj.disksIgnoreCut) % Ignore angular filter
-                                angFilt = ones(size(angFilt));
-                            end  
+                        radiusFilt = m >= radius(1,a) & m <= radius(1,a+1); % Radial filter (r)
+                        angFilt = k >= theta(1,b) & k <= theta(1,b+1); % Angular filter (theta)
 
-                            filt = radiusFilt .* angFilt;
-                            regionSize = sum(filt(:));
-
-                            if regionSize < minimumPixels % Not enough pixels to continue
-                                error('Not enough pixels in region. Please change mask radii.')
+                        if ismember(a,obj.disksIgnoreCut) % Ignore angular filter
+                            angFilt = ones(size(angFilt));
+                            if b > 1
+                                placeDisk = false;
                             end
+                        end  
 
-                            if strcmp(obj.meanIntegration,'gaussian')
-                                T = RFFilterVH .* filt;
-                                R = sum(T(:)) / regionSize * 255; % Mean equivalence
-                            end
+                        filt = radiusFilt .* angFilt;
+                        regionSize = sum(filt(:));
 
-                            % Apply filter across full trajectory.
+                        if regionSize < minimumPixels % Not enough pixels to continue
+                            error('Not enough pixels in region. Please change mask radii.')
+                        end
+
+                        T = RFFilterVH .* filt;
+                        R = sum(T(:)) / regionSize * 255; % Mean equivalence
+
+                        % Apply filter across full trajectory.
+                        if placeDisk == true
                             for n = 1:size(wTraj,4)
 
-                                if obj.meanDisksLogical(1,a) == 1 % Disk belongs
+                                S = wTraj(:,:,1,n) .* filt; % RF weighted trajectory
 
-                                    if strcmp(obj.meanIntegration,'gaussian')
-                                        S = wTraj(:,:,1,n) .* filt; % RF weighted trajectory
-                                    else
-                                        S = unwTraj(:,:,1,n) .* filt; % Unweighted trajectory
-                                    end
-
-                                    if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
-                                        S = 0;
-                                    end
-
-                                    if strcmp(obj.meanIntegration,'gaussian')
-                                        q(a,b,n) = sum(S(:)) / (regionSize  * R); % Renormalize
-                                    else
-                                        q(a,b,n) = sum(S(:)) / (regionSize  * 255); % Raw average
-                                    end
-
+                                if isempty(S) % Becomes an issue when pixel weight is very small (approx 0).
+                                    S = 0;
                                 end
 
+                                q(a,b,n) = sum(S(:)) / (regionSize  * R); % Renormalize
                             end
+
                         end
                     end
                 end
@@ -693,9 +662,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             
             % Pull information for all fixations in DOVES database
             load('+edu/+washington/+riekelab/+freedland/+images/fixationDatabase.mat')
-            order = randperm(length(frameNumber)); % Randomly order
-            frameNumber = frameNumber(order);
-            imageNumber = imageNumber(order);
+            A = unique(imageNumber);
             
             % Calculate trajectory size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
@@ -708,27 +675,36 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             xRange = floor(imgSize(1) / 2);
             yRange = floor(imgSize(2) / 2);
             
-            imageFrames = zeros(yRange.*2+1,xRange.*2+1,1,N); % Collection of images
+            imageFrames = zeros(yRange.*2+1,xRange.*2+1,1,length(imageNumber)); % Collection of images
+            counter = 1;
             
-            for a = 1:length(obj.imageNo)
-                
-                tempImage = imageNumber(a); % Pull image #
-                [~, baseMovement, fixMovement, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(tempImage, 1,...
-                        'amplification', 1,'mirroring', true); % Pull coordinates from DOVES database
+            for a = 1:length(A)
+                tempImage = imageNumber(A(a)); % Pull image #
+                [path, outputPicture] = edu.washington.riekelab.freedland.scripts.quickPullDOVES(tempImage, 1,...
+                        true); % Pull coordinates from DOVES database
                     
-                % Pull frame #
-                x = baseMovement.x(frameNumber(a)) + fixMovement.x(frameNumber(a));
-                y = baseMovement.y(frameNumber(a)) + fixMovement.y(frameNumber(a));
-                
                 % Scale pixels in image to monitor
-                img = pictureInformation.image;
+                img = outputPicture;
                 img = (img./max(max(img)));              
-                img2 = img.*255;      
+                img2 = img.*255;
+                    
+                frames = frameNumber(imageNumber == imageNumber(A(a)));
                 
-                % Pull image
-                imageFrames(:,:,1,a) = img2(y-yRange:y+yRange,...
-                    x-xRange:x+xRange); 
+                for b = 1:length(frames)
+
+                    % Pull frame #
+                    x = path.x(b);
+                    y = path.y(b);
+
+                    % Pull image
+                    imageFrames(:,:,1,counter) = img2(y-yRange:y+yRange,...
+                        x-xRange:x+xRange); 
+                    counter = counter + 1;
+                end
             end
+            
+            order = randperm(length(frameNumber)); % Randomly order
+            imageFrames = imageFrames(:,:,1,order);
         end
         
         function changeUnits(obj,type)

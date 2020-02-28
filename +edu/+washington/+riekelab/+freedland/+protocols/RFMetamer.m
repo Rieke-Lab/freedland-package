@@ -3,36 +3,20 @@
 classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
-        % Stimulus timing
-        preTime = 250 % in ms
-        stimTime = 5500 % in ms
-        tailTime = 250 % in ms
-        
-        % Natural image trajectory
-        referenceImage = 81; % image to build frankenstein metamer for.
+        % Basics
+        totalStimulusTime = 6000; % in ms
+        referenceImage = 81; % image to build metamer for.
+        numberOfDistinctMovies = 5; % number of distinct movies to compare
+        randomize = true; % whether to randomize movies shown
         
         % RF field information
         rfSigmaCenter = 30; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaSurround = 130; % (um) enter from difference of gaussians fit for overlaying receptive field.
         
-        % Disk placement
-        disks = 3; % number of disks to replace image with.
-        overrideRadii = [0 0.75 2 3]; % only takes effect if any value is >0. Arranges disks in any distribution depending on coordinate system. For info on RF coordinate system, see RFConversion function in code.
-        overrideCoordinate = 'RF'; % type of coordinates to measure disk radii.
-        xSliceFrequency = 1; % how many radial slices to cut between 0 and 90 degrees.
-        ySliceFrequency = 1; % how many radial slices to cut between 90 and 180 degrees.
-        disksIgnoreCut = [0 3]; % starting from the center disk and moving outwards, how many disks should we NOT cut (keep circular)?
-
-        % Disk type
-        meanDisks = [1 2 3]; % starting from the center disk and moving outwards, which disks should be averaged?
-        naturalDisks = [0 0];  % starting from the center disk and moving outwards, which disks should remain a natural image?
-        backgroundDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be left at background intensity?
-        switchDisks = [0 0]; % starting from the center disk and moving outwards, which disks should switch intensity based on fixation?
-        meanIntegration = 'gaussian'; % type of linear integration
+        % Arrangement of disks
+        modelNumber = 10; % Pre-determined model number to show replacement over.
         
         % Additional parameters
-        numberOfDistinctMovies = 5; % number of distinct movies to compare
-        randomize = true;
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(8) % number of epochs to queue
         amp % Output amplifier
@@ -60,45 +44,47 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         function prepareRun(obj)
 
             prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
-            
-            % Must have prerender set to avoid lagging through the replacement trajectory.     
-            if obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
-                error('Must have prerender set') 
-            end
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',2);
+                obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',1);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
                         
-            D = dir('+edu/+washington/+riekelab/+freedland/+movies');
+            obj.directory = 'Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies';
+            D = dir(obj.directory);
+            specificFile = strcat('rep',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround));
+            
             obj.movieFilenames = [];
             replacementMovies = [];
             for a = 1:size(D,1)
                 A = D(a).name;
                 
                 % Only select relevant videos
-                if contains(A,string(obj.referenceImage)) && ...
-                        contains(A,string(obj.rfSigmaCenter)) && ...
-                        contains(A,string(obj.rfSigmaSurround))
-                    if contains(A,'ref') % Reference trajectory, must include
-                        obj.movieFilenames = [obj.movieFilenames;{A}];
-                    elseif contains(A,'rep') % Replacement trajectories
-                        replacementMovies = [replacementMovies;{A}];
-                    end
+                if sum(strfind(A,'ref') & strfind(A,mat2str(obj.referenceImage))) > 0 % Normal trajectory
+                    obj.movieFilenames = [obj.movieFilenames;{A}];
+                end
+                
+                if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
+                    replacementMovies = [replacementMovies;{A}];
                 end
             end
-            replacementMovies = replacementMovies(1:obj.numberOfDistinctMovies,:);
+            
+            if obj.numberOfDistinctMovies > size(replacementMovies,1)
+                error('Not enough distinct movies pre-generated.')
+            else
+                replacementMovies = replacementMovies(1:obj.numberOfDistinctMovies,:);
+            end
             obj.movieFilenames = [obj.movieFilenames;replacementMovies];
 
-            obj.directory = '+edu/+washington/+riekelab/+freedland/+movies/';
-            uiopen(fullfile(obj.directory,'ref81.mp4'))
+            % Find background intensity
+            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage, 1,...
+                    'amplification', 1,'mirroring', false);
+            img = pictureInformation.image;
+            img = (img./max(max(img)));
+            obj.backgroundIntensity = mean(img(:));
             
-            raw = double(ref81);
-            obj.backgroundIntensity = raw(1,1,1,1) / 255; % set manually in videos in top left corner
-            
-            obj.sequence = repelem(1:obj.numberOfDistinctMovies,obj.numberOfAverages);
+            obj.sequence = repelem(1:(obj.numberOfDistinctMovies+1),obj.numberOfAverages); % +1 includes original movie
             
             if obj.randomize == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
@@ -111,7 +97,7 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             
             device = obj.rig.getDevice(obj.amp);
-            duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+            duration = (obj.totalStimulusTime) / 1e3;
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
@@ -128,7 +114,7 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         function p = createPresentation(obj)
             
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
+            p = stage.core.Presentation(obj.totalStimulusTime * 1e-3);
 
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity);
@@ -138,8 +124,7 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             % Prep to display image
             scene = stage.builtin.stimuli.Movie(fullfile(obj.directory,f));
-            scene.size = [size(obj.imageMatrix,2) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
-                size(obj.imageMatrix,1) * 3.3/obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel')];
+            scene.size = [canvasSize(1),canvasSize(2)];
             p0 = canvasSize/2;
             scene.position = p0;
             

@@ -10,6 +10,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
         
         % Natural image trajectory
         referenceImage = 81; % image to build frankenstein metamer for.
+        numberOfImages = 5; % number of images to build
         
         % RF field information
         rfSigmaCenter = 70; % (um) enter from difference of gaussians fit for overlaying receptive field.
@@ -29,6 +30,8 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
         backgroundDisks = [0 0]; % starting from the center disk and moving outwards, which disks should be left at background intensity?
         switchDisks = [0 0]; % starting from the center disk and moving outwards, which disks should switch intensity based on fixation?
         meanIntegration = 'gaussian'; % type of linear integration
+        
+        contrastCutoff = 0.03; % Contrast (0 to 1) where images are considered identical
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -61,6 +64,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
         rfSizing
         preUnit
         postUnit
+        replacementFrames
     end
 
     methods
@@ -130,7 +134,6 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             % Search along set of reference images
             tic
             unwImageFrames = findImage(obj);
-            toc
             
             % Convolve each image with cell's filter
             wimageFrames = zeros(size(unwImageFrames));
@@ -139,7 +142,6 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             end
             
             % Calculate statistics
-            tic
             if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
                 [linearSpace, ~] = linearEquivalency(obj, wimageFrames, RFFilterVH);
             else
@@ -147,9 +149,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             end
             toc
             
-            % 
-            
-            buildMasksMonitor(obj) % Build relevant masks for monitor
+            buildMasksMonitor(obj, linearSpace) % Build relevant masks for monitor
             
             % Adjust axes and units for monitor (DOVES VH units to pixels)
             obj.xTraj = -(obj.xTraj - size(img,2)/2);
@@ -614,7 +614,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             end
             
             q = zeros(obj.disks,size(theta,2)-1,size(wTraj,4)); % in form [disk #, angle, mean value]
-            
+
             % Calculate statistics
             for a = 1:size(radius,2) - 1
                 for b = 1:size(theta,2) - 1
@@ -680,7 +680,6 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             imageFrames = zeros(yRange.*2+1,xRange.*2+1,1,length(imageNumber)); % Collection of images
             counter = 1;
             
-            tic
             for a = 1:length(A)
                 tempImage = imageNumber(A(a)); % Pull image #
                 [path, outputPicture] = edu.washington.riekelab.freedland.scripts.quickPullDOVES(tempImage, 1,...
@@ -705,10 +704,6 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
                     counter = counter + 1;
                 end
             end
-            toc
-            
-            order = randperm(length(frameNumber)); % Randomly order
-            imageFrames = imageFrames(:,:,1,order);
         end
         
         function changeUnits(obj,type)
@@ -789,7 +784,7 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             end
         end
         
-        function buildMasksMonitor(obj)
+        function buildMasksMonitor(obj, linearSpace)
             
             % Calculate trajectory size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
@@ -805,13 +800,34 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
 
             % In pixels
             [xx, yy] = meshgrid(1:canvasSize(1),1:canvasSize(2));
+            
+            % Radial space
             m = sqrt((xx-canvasSize(1)/2).^2+(yy-canvasSize(2)/2).^2);
+            
+            % Theta space
             k = atan((xx - canvasSize(1)/2) ./ (yy - canvasSize(2)/2));
             k = k ./ max(k(:)) .* 90;
             k = abs(k - 90);
             k(1:round(canvasSize(2)/2)-1,:) = k(1:round(canvasSize(2)/2)-1,:) + 180;
-
             k = mod(k - obj.rotateSlices,360);
+
+            obj.replacementFrames = cell(size(linearSpace,1),size(linearSpace,2),size(obj.linear,3));
+            % Compare each frame
+            for a = 1:size(obj.linear,3)
+                A = repmat(obj.linear(:,:,a),1,1,size(linearSpace,3));
+                B = abs(A - linearSpace);
+                
+                C = B > 0 & B <= (obj.backgroundIntensity * obj.contrastCutoff);
+                
+                for b = 1:size(C,1)
+                    for c = 1:size(C,2)
+                        D = C(b,c,:); % Take individual disk
+                        obj.replacementFrames{b,c,a} = unwImageFrames(:,:,D > 0);
+                    end
+                end
+            end
+            toc
+            keyboard
 
             if obj.xSliceFrequency == 0 && obj.ySliceFrequency > 0 % Special case
                 k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) = k(round(canvasSize(2)/2):end,round(canvasSize(1)/2):end) + 360; % add
@@ -821,14 +837,20 @@ classdef RFFrankenstein < edu.washington.riekelab.protocols.RiekeLabStageProtoco
             if sum([obj.xSliceFrequency obj.ySliceFrequency]) == 0
 
                 obj.masks = zeros(canvasSize(2),canvasSize(1),size(obj.radii,2));
-                obj.specificOpacity = ones(1,size(obj.masks,3)) .* obj.diskOpacity; % Will only place opaque masks
-
+                
                 for a = 1:size(obj.radii,2) - 1
                     obj.masks(:,:,a) = m >= (obj.radii(1,a).*(1-obj.diskExpandRadius/100))...
                         & m <= (obj.radii(1,a+1).*(1+obj.diskExpandRadius/100));
-                    if ismember(a,obj.naturalDisks) % If no disk...
-                        obj.specificOpacity(1,a) = 0; % Make opacity zero. (Reveals natural image underneath).
+                    
+                    specificMask1 = linearSpace(a,:); % Library of images
+                    specificMask2 = obj.linear(a,:);  % Reference image
+                    
+                    for b = 1:size(specificMask,1)
+                        A = abs(specificMask1(a) - specificMask2); % Find specific mask for each frame
+                        B = A > 0 & A <= (obj.backgroundIntensity * obj.contrastCutoff);
                     end
+                    
+                    obj.masks(:,:,a) = obj.masks;
                 end
 
             else % The case with slices

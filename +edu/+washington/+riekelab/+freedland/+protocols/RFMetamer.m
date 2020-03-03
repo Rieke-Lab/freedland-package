@@ -6,15 +6,16 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         % Basics
         totalStimulusTime = 6000; % in ms
         referenceImage = 81; % image to build metamer for.
-        numberOfDistinctMovies = 5; % number of distinct movies to compare
-        randomize = true; % whether to randomize movies shown
+        
+        % Arrangement of disks
+        modelNumber = 15; % Pre-determined model number to show replacement over.
         
         % RF field information
         rfSigmaCenter = 30; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        rfSigmaSurround = 130; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        
-        % Arrangement of disks
-        modelNumber = 10; % Pre-determined model number to show replacement over.
+        rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        addBlur = true;
+        randomize = true; % whether to randomize movies shown
+        numberOfDistinctMovies = 3; % number of distinct movies to compare
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -53,7 +54,8 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                         
             obj.directory = 'Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies';
             D = dir(obj.directory);
-            specificFile = strcat('rep',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround));
+            specificFile = strcat('rep',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...,
+                '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.modelNumber));
             
             obj.movieFilenames = [];
             replacementMovies = [];
@@ -70,8 +72,19 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 end
             end
             
+            A = strfind(replacementMovies,'blur');
+            
+            if obj.addBlur == false
+                B = cellfun('isempty',A);
+            else
+                B = not(cellfun('isempty',A));
+            end
+            
+            replacementMovies = replacementMovies(B,:);
+
             if obj.numberOfDistinctMovies > size(replacementMovies,1)
-                error('Not enough distinct movies pre-generated.')
+                msg = strcat('Not enough distinct movies pre-generated. Only',' ',mat2str(size(replacementMovies,1)),' movies exist.');
+                error(msg)
             else
                 replacementMovies = replacementMovies(1:obj.numberOfDistinctMovies,:);
             end

@@ -8,7 +8,7 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         referenceImage = 81; % image to build metamer for.
         
         % Arrangement of disks
-        modelNumber = 15; % Pre-determined model number to show replacement over.
+        modelNumber = [15,13,12,9,8]; % Pre-determined model number to show replacement over.
         
         % RF field information
         rfSigmaCenter = 30; % (um) enter from difference of gaussians fit for overlaying receptive field.
@@ -54,41 +54,46 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                         
             obj.directory = 'Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies';
             D = dir(obj.directory);
-            specificFile = strcat('rep',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...,
-                '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.modelNumber));
             
             obj.movieFilenames = [];
             replacementMovies = [];
-            for a = 1:size(D,1)
-                A = D(a).name;
-                
-                % Only select relevant videos
-                if sum(strfind(A,'ref') & strfind(A,mat2str(obj.referenceImage))) > 0 % Normal trajectory
-                    obj.movieFilenames = [obj.movieFilenames;{A}];
-                end
-                
-                if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
-                    replacementMovies = [replacementMovies;{A}];
-                end
-            end
-            
-            A = strfind(replacementMovies,'blur');
-            
-            if obj.addBlur == false
-                B = cellfun('isempty',A);
-            else
-                B = not(cellfun('isempty',A));
-            end
-            
-            replacementMovies = replacementMovies(B,:);
+            for b = 1:length(obj.modelNumber)
+                % Identify relevant filenames
+                specificFile = strcat('rep',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...,
+                    '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.modelNumber(b)));
 
-            if obj.numberOfDistinctMovies > size(replacementMovies,1)
-                msg = strcat('Not enough distinct movies pre-generated. Only',' ',mat2str(size(replacementMovies,1)),' movies exist.');
-                error(msg)
-            else
-                replacementMovies = replacementMovies(1:obj.numberOfDistinctMovies,:);
+                for a = 1:size(D,1)
+                    A = D(a).name;
+
+                    % Only select relevant videos
+                    if sum(strfind(A,'ref') & strfind(A,mat2str(obj.referenceImage))) > 0 % Normal trajectory
+                        obj.movieFilenames = [obj.movieFilenames;{A}];
+                    end
+
+                    if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
+                        replacementMovies = [replacementMovies;{A}];
+                    end
+                end
+            
+                % Only consider blurred/non-blurred movies
+                A = strfind(replacementMovies,'blur');
+                if obj.addBlur == false
+                    B = cellfun('isempty',A);
+                else
+                    B = not(cellfun('isempty',A));
+                end
+                replacementMovies = replacementMovies(B,:);
+
+                % Check sufficient number of movies have been pre-generated
+                if obj.numberOfDistinctMovies > size(replacementMovies,1)
+                    msg = strcat('Not enough distinct movies pre-generated. Only',' ',mat2str(size(replacementMovies,1)),' movies exist.');
+                    error(msg)
+                else
+                    replacementMovies = replacementMovies(1:obj.numberOfDistinctMovies,:);
+                end
+                obj.movieFilenames = [obj.movieFilenames;replacementMovies];
             end
-            obj.movieFilenames = [obj.movieFilenames;replacementMovies];
+            keyboard
 
             % Find background intensity
             [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage, 1,...

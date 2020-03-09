@@ -56,12 +56,12 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             D = dir(obj.directory);
             
             obj.movieFilenames = [];
-            replacementMovies = [];
             for b = 1:length(obj.modelNumber)
                 % Identify relevant filenames
                 specificFile = strcat('rep',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...,
                     '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.modelNumber(b)));
-
+                replacementMovies = [];
+                
                 for a = 1:size(D,1)
                     A = D(a).name;
 
@@ -93,7 +93,6 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 end
                 obj.movieFilenames = [obj.movieFilenames;replacementMovies];
             end
-            keyboard
 
             % Find background intensity
             [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage, 1,...
@@ -102,7 +101,7 @@ classdef RFMetamer < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             img = (img./max(max(img)));
             obj.backgroundIntensity = mean(img(:));
             
-            obj.sequence = repelem(1:(obj.numberOfDistinctMovies+1),obj.numberOfAverages); % +1 includes original movie
+            obj.sequence = repelem(1:size(obj.movieFilenames,1),obj.numberOfAverages); % +1 includes original movie
             
             if obj.randomize == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));

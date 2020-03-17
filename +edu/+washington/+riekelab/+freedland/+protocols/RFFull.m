@@ -5,29 +5,32 @@ classdef RFFull < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Basics
         totalStimulusTime = 6000; % in ms
-        referenceImage = 81; % image to build metamer for.
+        referenceImage = [5,81]; % image to build metamer for.
         
         % Arrangement of disks
         experimentsDiskArray = 1:15  % Number of experimental movies to show
         experimentsMetamer = [8,9,12,13,15]; % Pre-determined model number to show replacement over.
+        addBlur = [12, 15]; % experiments to add Gaussian blur to (both diskArray and metamer)
         
         % RF field information
-        rfSigmaCenter = 30; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaCenter = '30'; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaSurround = '100'; % (um) enter from difference of gaussians fit for overlaying receptive field.
 
-        addBlur = true; % apply gaussian blur over sharp edges.
         randomize = true; % whether to randomize movies shown
-        numberOfMetamers = 3; % number of distinct metamers to show
-        
+        numberOfMetamers = 2; % number of distinct metamers to show
+        rawMovieFrequency = 3; % How often should we show the original movie amongst experimental movies? (i.e, 3 = every 3 experimental movies, we show 1 raw movie).
+
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(8) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        rfSigmaCenterType = symphonyui.core.PropertyType('char', 'row', {'30','40','50','70','100'}) 
+        rfSigmaSurroundType = symphonyui.core.PropertyType('char', 'row', {'100','130','150','180','210'}) 
         backgroundIntensity
         sequence
         counter
@@ -58,89 +61,128 @@ classdef RFFull < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             D = dir(obj.directory);
             
             obj.movieFilenames = [];
-            % Find relevant diskArray videos
-            for b = 1:length(obj.experimentsDiskArray)
-                
-                % Identify relevant filenames
-                if obj.addBlur == false
-                    specificFile = strcat('img',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...
-                        '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.experimentsDiskArray(b)),'_projection');
-                else
-                    specificFile = strcat('img',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...
-                        '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.experimentsDiskArray(b)),'_blur__projection');
-                end
-                
-                refMovie = strcat('img',mat2str(obj.referenceImage),'_raw');
-                replacementMovies = [];
-                
-                for a = 1:size(D,1)
-                    A = D(a).name;
-
-                    % Only select relevant videos
-                    if sum(strfind(A,refMovie)) > 0 % Normal trajectory
-                        obj.movieFilenames = [obj.movieFilenames;{A}];
-                    end
-
-                    if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
-                        replacementMovies = [replacementMovies;{A}];
-                    end
-                end
-
-                obj.movieFilenames = [obj.movieFilenames;replacementMovies];
-            end
+            frequencyCheck = 0;
             
-            % Repeat for metamers
-            for b = 1:length(obj.experimentsMetamer)
+            for j = 1:length(obj.referenceImage) % Individual image
                 
-                % Identify relevant filenames
-                if obj.addBlur == false
-                    specificFile = strcat('img',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...
-                        '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.experimentsMetamer(b)),'_metamer');
-                else
-                    specificFile = strcat('img',mat2str(obj.referenceImage),'_',mat2str(obj.rfSigmaCenter),...
-                        '_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.experimentsMetamer(b)),'_blur__metamer');
-                end
-                
-                refMovie = strcat('img',mat2str(obj.referenceImage),'_raw');
-                replacementMovies = [];
-                
+                % Find reference movie
+                refMovie = strcat('img',mat2str(obj.referenceImage(j)),'_raw');
                 for a = 1:size(D,1)
                     A = D(a).name;
 
-                    % Only select relevant videos
                     if sum(strfind(A,refMovie)) > 0 % Normal trajectory
-                        obj.movieFilenames = [obj.movieFilenames;{A}];
-                    end
-
-                    if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
-                        replacementMovies = [replacementMovies;{A}];
+                        movieName = A;
                     end
                 end
                 
-                if length(replacementMovies) > obj.numberOfMetamers
-                    replacementMovies = replacementMovies(1:obj.numberOfMetamers,:);
-                elseif length(replacementMovies) < obj.numberOfMetamers
-                    error('not enough metamers pre-generated.')
+                % Find relevant diskArray videos
+                for b = 1:length(obj.experimentsDiskArray)
+
+                    specificFile = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
+                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsDiskArray(b)),'_projection');
+                    specificFileBlur = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
+                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsDiskArray(b)),'_blur__projection');
+
+                    replacementMovies = [];
+                    
+                    for a = 1:size(D,1)
+                        A = D(a).name;
+
+                        if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
+                            
+                            if mod(frequencyCheck,obj.rawMovieFrequency) == 0
+                                replacementMovies = [replacementMovies;{movieName}];
+                            end
+                                
+                            replacementMovies = [replacementMovies;{A}];
+                            frequencyCheck = frequencyCheck + 1;
+                        end
+                        
+                        if sum(obj.experimentsDiskArray(b) == obj.addBlur) > 0  % Add video with blur into the mix
+                            if sum(strfind(A,specificFileBlur)) > 0
+                                if mod(frequencyCheck,obj.rawMovieFrequency) == 0
+                                    replacementMovies = [replacementMovies;{movieName}];
+                                end
+
+                                replacementMovies = [replacementMovies;{A}];
+                                frequencyCheck = frequencyCheck + 1;
+                            end
+                        end
+                            
+                    end
+
+                    obj.movieFilenames = [obj.movieFilenames;replacementMovies];
                 end
 
-                obj.movieFilenames = [obj.movieFilenames;replacementMovies];
+                % Repeat for metamers
+                for b = 1:length(obj.experimentsMetamer)
+
+                    specificFile = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
+                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsMetamer(b)),'_metamer');
+                    specificFileBlur = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
+                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsMetamer(b)),'_blur__metamer');
+
+                    replacementMovies = [];
+                    individualCounter = 0;
+                    individualBlurCounter = 0;
+
+                    for a = 1:size(D,1)
+                        A = D(a).name;
+
+                        if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
+                            
+                            if individualCounter < obj.numberOfMetamers
+                                
+                                if mod(frequencyCheck,obj.rawMovieFrequency) == 0
+                                    replacementMovies = [replacementMovies;{movieName}];
+                                end
+                                
+                                replacementMovies = [replacementMovies;{A}];
+                                frequencyCheck = frequencyCheck + 1;
+                                individualCounter = individualCounter + 1;
+                            end
+                        end
+                        
+                        if sum(obj.experimentsMetamer(b) == obj.addBlur) > 0  % Add video with blur into the mix
+                            if sum(strfind(A,specificFileBlur)) > 0
+                                
+                                if individualBlurCounter < obj.numberOfMetamers
+                                    if mod(frequencyCheck,obj.rawMovieFrequency) == 0
+                                        replacementMovies = [replacementMovies;{movieName}];
+                                    end
+                                    
+                                    replacementMovies = [replacementMovies;{A}];
+                                    frequencyCheck = frequencyCheck + 1;
+                                    individualBlurCounter = individualBlurCounter + 1;
+                                end
+
+                            end
+                        end
+                    end
+
+                    obj.movieFilenames = [obj.movieFilenames;replacementMovies];
+                end
             end
 
             obj.totalRuns = size(obj.movieFilenames,1);
-                        
+
             % Find background intensity
-            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage, 1,...
+            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage(1), 1,...
                     'amplification', 1,'mirroring', false);
             img = pictureInformation.image;
             img = (img./max(max(img)));
             obj.backgroundIntensity = mean(img(:));
             
-            obj.sequence = repelem(1:size(obj.movieFilenames,1),obj.numberOfAverages); % +1 includes original movie
+            obj.sequence = repmat(1:size(obj.movieFilenames,1),1,obj.numberOfAverages);
             
             if obj.randomize == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
             obj.counter = 1;
+
+            % For identifying a good empirical rawMovieFrequency
+            movieTimings(obj,movieName);
+        
         end
         
         function prepareEpoch(obj, epoch)
@@ -186,6 +228,23 @@ classdef RFFull < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             p.addStimulus(scene);
             
             obj.counter = obj.counter + 1;
+        end
+        
+        function movieTimings(obj,movieName)
+            videoLength = 6; % seconds
+            A = find(strcmp(obj.movieFilenames,movieName));
+            
+            B = [];
+            for a = 1:length(A)
+                B = [B,find(obj.sequence == A(a))];
+            end
+            
+            C = diff(sort(B) .* videoLength / 60);
+            D = strcat('Average time between raw movies:',mat2str(round(mean(C),2)),'minutes.');
+            disp(D)
+            
+            D = strcat('Approximate total stimulus time:',mat2str(length(obj.sequence)* videoLength /60),'minutes.');
+            disp(D)
         end
 
         function tf = shouldContinuePreparingEpochs(obj)

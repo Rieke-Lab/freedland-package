@@ -1,7 +1,7 @@
 % Compares mirrored naturalistic image trajectories with and without
 % fixational eye movements.
 % By J. Freedland, 2019.
-classdef RFJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef imageJitter < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         
         % Stimulus timing

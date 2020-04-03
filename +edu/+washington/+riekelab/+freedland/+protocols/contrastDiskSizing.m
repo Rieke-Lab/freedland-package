@@ -14,7 +14,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         
         % Additional options
         splitField = false 
-        rotation = 0;  % deg
+        rotation = 0;  % deg (0 to 180)
         backgroundIntensity = 0.168 % (0-1)
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(1) % number of epochs to queue
@@ -28,6 +28,8 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         monitorFrameRate
         micronsPerPixel
         monitorSize
+        analysisFigure
+        disks
     end
 
     methods
@@ -41,9 +43,9 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
             
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
-            obj.showFigure('edu.washington.riekelab.turner.figures.MeanResponseFigure',...
+            obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
-            obj.showFigure('edu.washington.riekelab.turner.figures.FrameTimingFigure',...
+            obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
             % M. Turner's online analysis for F1/F2 frequencies
@@ -64,11 +66,11 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             obj.micronsPerPixel = obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.monitorSize = obj.rig.getDevice('Stage').getCanvasSize();
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
-            obj.monitorFrameRate = epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
-            
+            obj.monitorFrameRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
+
             % Identify disk radii
             obj.diskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.diskRadii,obj.micronsPerPixel,'UM2PIX'));
-            obj.diskRadii_PIX = [0, obj.diskRadii_PIX, obj.monitorSize/2];
+            obj.diskRadii_PIX = [0, obj.diskRadii_PIX, round(max(obj.monitorSize)/2)];
             
             % Make disks
             [xx,yy] = meshgrid(1:obj.monitorSize(2),1:obj.monitorSize(1));
@@ -78,12 +80,49 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             for a = 1:length(obj.diskRadii_PIX)-1
                 obj.disks(:,:,a) = r > obj.diskRadii_PIX(a) & r < obj.diskRadii_PIX(a+1);
             end
+            
+            if obj.splitField == true;
+                
+                % Define theta space
+                th = atan((xx - obj.monitorSize(2)/2) ./ (yy - obj.monitorSize(1)/2));
+                th = abs(th-pi/2);              
+                nonsmooth = find(diff(th) > pi/2,1);
+                th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
+                th = rad2deg(th);
+                
+                % Region for split field
+                actualRotation = 180 - obj.rotation;
+                overmask = th > actualRotation & th < actualRotation+180;
+                invOvermask = overmask == 0;
+                
+                % Split masks
+                set1 = obj.disks .* repmat(overmask,1,1,size(obj.disks,3));
+                set2 = obj.disks .* repmat(invOvermask,1,1,size(obj.disks,3));
+                obj.disks = cat(3,set1,set2);
+                
+                % Ensure adjacent disks are contrast reversing
+                diskTotal = size(set1,3);
+                partialOrder = [1 1+diskTotal];
+                order = []; % Not large enough to bother pre-allocating.
+                counter = 1;
+                for a = 1:diskTotal
+                    specificOrder = partialOrder + (counter-1)*2;
+                    if mod(a,2) == 1
+                        order = [order specificOrder];
+                    else
+                        order = [order  fliplr(specificOrder+1)];
+                        counter = counter + 1;
+                    end
+                end
+
+                % Order disks by contrast
+                obj.disks = obj.disks(:,:,order);
+            end
         end
         
         function F1F2_PSTH(obj, ~, epoch) %online analysis function
-            
+
             % Function by M. Turner
-            
             response = epoch.getResponse(obj.rig.getDevice(obj.amp));
             quantities = response.getData();
             sampleRate = response.sampleRate.quantityInBaseUnits;
@@ -94,7 +133,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             if strcmp(obj.onlineAnalysis,'extracellular') %spike recording
                 filterSigma = (20/1000)*sampleRate; %msec -> dataPts
                 newFilt = normpdf(1:10*filterSigma,10*filterSigma/2,filterSigma);
-                res = edu.washington.riekelab.turner.utils.spikeDetectorOnline(quantities,[],sampleRate);
+                res = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(quantities,[],sampleRate);
                 epochResponseTrace = zeros(size(quantities));
                 epochResponseTrace(res.sp) = 1; %spike binary
                 epochResponseTrace = sampleRate*conv(epochResponseTrace,newFilt,'same'); %inst firing rate
@@ -134,44 +173,41 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
-            
+
             for a = 1:size(obj.disks,3)
                 grate = stage.builtin.stimuli.Grating('square'); % Square wave grating
-                grate.size = [obj.monitorSize(1) obj.monitorSize(2)];
-                grate.position = obj.monitorSize/2;
-                grate.spatialFreq = 1/(4*obj.diskRadii_PIX(a+1)); % x2 for diameter, x2 for grating
+                grate.size = fliplr(obj.monitorSize);
+                grate.position = fliplr(obj.monitorSize)/2;
+                grate.spatialFreq = 1 / max(obj.monitorSize * 2);%/(2*obj.diskRadii_PIX(a+1)); % x2 for diameter, x2 for grating
                 grate.color = 2*obj.backgroundIntensity; % Amplitude of square wave
                 grate.contrast = obj.contrast; % Multiplier on square wave
                 
-                grateShape = uint8(obj.masks(:,:,a)*255);
+                grateShape = uint8(obj.disks(:,:,a)*255);
                 grateMask = stage.core.Mask(grateShape);
                 grate.setMask(grateMask);
             
                 % Contrasting gratings between each radius
                 if mod(a,2) == 0
-                    grate.phase = 90;
+                    grate.phase = 180;
                 else
                     grate.phase = 0;
                 end
 
                 p.addStimulus(grate); %add grating to the presentation
 
-                %make it contrast-reversing
-                if (obj.temporalFrequency > 0) 
-                    grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
-                        @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
-                    p.addController(grateContrast); %add the controller
-                end
+                grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
+                    @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
+                p.addController(grateContrast); %add the controller
+                
+                %hide during pre & post
+                grateVisible = stage.builtin.controllers.PropertyController(grate, 'visible', ...
+                    @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
+                p.addController(grateVisible);
             end
             
             function c = getGrateContrast(obj, time)
                 c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * time);
             end
-            
-            %hide during pre & post
-            grateVisible = stage.builtin.controllers.PropertyController(grate, 'visible', ...
-                @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
-            p.addController(grateVisible);
         end
         
         function prepareEpoch(obj, epoch)

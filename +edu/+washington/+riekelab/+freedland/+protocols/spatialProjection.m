@@ -17,17 +17,20 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
         naturalImages = [5,81];
         randomizeOrder = true
         numberOfAverages = uint16(5) % number of epochs to queue
+        onlineAnalysis = 'extracellular'
         amp % Output amplifier
     end
 
     properties (Hidden)
         ampType
-        
+        onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})   
+
         % Rig options
         micronsPerPixel
         monitorSize
         monitorFrameRate
         diskRadii_arcmin
+        videoSize
         
         % Assigned parameters
         imageNo  
@@ -43,6 +46,19 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
         naturalDisks
         numberOfMetamerMovies
         smoothing
+        switchPref
+        saccades
+        fixations
+        imageMatrix
+        backgroundIntensity
+        xTraj
+        yTraj
+        rfSizing
+        radii
+        theta
+        switchTraj
+        frameNumber
+        imageNumber
         
         % Load settings
         filenames
@@ -71,7 +87,7 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.micronsPerPixel = obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.monitorSize = obj.rig.getDevice('Stage').getCanvasSize();
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
-            obj.monitorFrameRate = epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
+            obj.monitorFrameRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
             obj.videoSize = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.monitorSize,obj.micronsPerPixel,'PIX2VH');
             
             % Make identify disk radii
@@ -81,7 +97,8 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.diskRegionUnits = 'arcmin';
             
             % Create and export movies
-            projectionNames = generateProjections(obj);
+%             projectionNames = generateProjections(obj);
+
             metamerNames = generateMetamers(obj,2);
             compiledFilenames = [projectionNames; metamerNames];
             
@@ -226,8 +243,8 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
                             0,'exportRawMovie',true);
                     end
                     
-                    filename = strcat('img',string(obj.imageNo),'_',string(obj.rfSigmaCenter),...
-                        '_',string(obj.rfSigmaSurround),'_',string(experimentNumbers(b)));
+                    filename = strcat('img',mat2str(obj.imageNo),'_',mat2str(obj.rfSigmaCenter),...
+                        '_',mat2str(obj.rfSigmaSurround),'_',mat2str(experimentNumbers(b)));
 
                     if obj.smoothing == true
                         filename = strcat(filename,'_blur_');
@@ -286,8 +303,8 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
                     obj.meanDisks       = mDisks{1,b};
                     obj.smoothing       = false;
 
-                    filename = strcat('img',string(obj.imageNo),'_',string(obj.rfSigmaCenter),...
-                        '_',string(obj.rfSigmaSurround),'_',string(experimentNumbers(b)));
+                    filename = strcat('img',mat2str(obj.imageNo),'_',mat2str(obj.rfSigmaCenter),...
+                        '_',mat2str(obj.rfSigmaSurround),'_',mat2str(experimentNumbers(b)));
 
                     if sum(experimentNumbers(b) == smoothedExperiments) > 0
                         for c = 1:2 % Add additional smoothing
@@ -297,8 +314,8 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
                                 filename = strcat(filename,'_blur_');
                             else      % Compare without blur
                                 obj.smoothing = false;
-                                filename = strcat('img',string(obj.imageNo),'_',string(obj.rfSigmaCenter),...
-                                    '_',string(obj.rfSigmaSurround),'_',string(experimentNumbers(b)));
+                                filename = strcat('img',mat2str(obj.imageNo),'_',mat2str(obj.rfSigmaCenter),...
+                                    '_',mat2str(obj.rfSigmaSurround),'_',mat2str(experimentNumbers(b)));
                             end
 
                             outputFilename = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.metamerGeneration(obj,filename,...

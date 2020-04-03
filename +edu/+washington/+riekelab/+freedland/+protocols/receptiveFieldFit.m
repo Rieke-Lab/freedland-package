@@ -9,6 +9,7 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
         centerSigma = [10,20,30,40,50,60,70,80,90,100] % in um
         annulusSize = [30,40,50,60,70,80,90,100] % in um
         backgroundIntensity = 0.168; % maximum light intensity we encounter (0-1)
+        contrast = 0.9; % 0-1 for spot brightness
         randomizeOrder = true
         onlineAnalysis = 'none'
         numberOfAverages = uint16(2) % number of epochs to queue
@@ -23,14 +24,15 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
         annulusSizeSequence
         centerSigmaSelectionIndex
         annulusSizeSelectionIndex
-        currentCenterSigma
-        currentAnnulusSize
+        rfSigmaCenter
+        rfSigmaSurround
         spotIntensity
         imageMatrix
         trials
         micronsPerPixel
         monitorSize
         monitorFrameRate
+        videoSize
     end
     
     properties (Hidden, Transient)
@@ -59,15 +61,15 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             
             obj.centerSigmaSequence = obj.centerSigma;
             obj.annulusSizeSequence = obj.annulusSize;
-
+            
             % Define x axis for online analysis
             if length(obj.centerSigmaSequence) > 1
-                obj.showFigure('edu.washington.riekelab.freedland.figures.RFWeightingFigure',...
-                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','center sigma');
+                obj.showFigure('edu.washington.riekelab.freedland.figures.receptiveFieldFitFigure',...
+                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','center sigma (um)');
                 obj.trials = length(obj.centerSigmaSequence);
             else
-                obj.showFigure('edu.washington.riekelab.freedland.figures.RFWeightingFigure',...
-                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','annulus size');
+                obj.showFigure('edu.washington.riekelab.freedland.figures.receptiveFieldFitFigure',...
+                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','surround sigma (um)');
                 obj.trials = length(obj.annulusSizeSequence);
             end
             
@@ -76,10 +78,10 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
                 obj.annulusSizeSequence = obj.annulusSizeSequence(randperm(length(obj.annulusSizeSequence)));
             end
             
-            obj.centerSigmaSelectionIndex = 0;
-            obj.annulusSizeSelectionIndex = 0;
-            obj.rfCenterSigma = obj.centerSigmaSequence(obj.centerSigmaSelectionIndex+1);
-            obj.rfCenterSurround = obj.rfCenterSigma + obj.annulusSizeSequence(obj.annulusSizeSelectionIndex+1);
+            obj.centerSigmaSelectionIndex = 1;
+            obj.annulusSizeSelectionIndex = 1;
+            obj.rfSigmaCenter = obj.centerSigmaSequence(obj.centerSigmaSelectionIndex);
+            obj.rfSigmaSurround = obj.rfSigmaCenter + obj.annulusSizeSequence(obj.annulusSizeSelectionIndex);
         end
         
         function prepareEpoch(obj, epoch)
@@ -89,8 +91,8 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
 
-            epoch.addParameter('specificCenterSigma', obj.currentCenterSigma);
-            epoch.addParameter('specificAnnulusSize', obj.currentAnnulusSize);
+            epoch.addParameter('rfSigmaCenter', obj.rfSigmaCenter);
+            epoch.addParameter('rfSigmaSurround', obj.rfSigmaSurround);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity)
         end
 
@@ -100,42 +102,43 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
             p.setBackgroundColor(obj.backgroundIntensity);
             
+            % Pull parameters for package
             obj.micronsPerPixel = obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.monitorSize = obj.rig.getDevice('Stage').getCanvasSize();
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
-            obj.monitorFrameRate = epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
+            obj.monitorFrameRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
             obj.videoSize = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.monitorSize,obj.micronsPerPixel,'PIX2VH');
-            
-            % calculate background intensity
+
+            % Pull filter
             rfFilter = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.calculateFilter(obj);
-            rfFilter = imresize(rfFilter,obj.monitorSize);
             
+            % Adjust for ON/OFF cells
             if strcmp(obj.cellClass,'ON')
-                rfFilter = rfFilter .* obj.backgroundIntensity + obj.backgroundIntensity;
+                rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast) + obj.backgroundIntensity;
             elseif strcmp(obj.cellClass,'OFF')
-                rfFilter = (1 - rfFilter) .* obj.backgroundIntensity;
+                rfFilter = (1 - rfFilter) .* (obj.backgroundIntensity .* obj.contrast) + ((1-obj.contrast) .* obj.backgroundIntensity);
             end
             
-            % scale to maximum light intensity
+            % Scale to maximum light intensity
             obj.imageMatrix = uint8(rfFilter .* 255);
             
+            % Display in symphony
             scene = stage.builtin.stimuli.Image(obj.imageMatrix);
-            scene.size = [size(obj.imageMatrix,2) size(obj.imageMatrix,1)];
-            scene.position = canvasSize/2;
+            scene.size = fliplr(obj.monitorSize);
+            scene.position = fliplr(obj.monitorSize)/2;
+            scene.setMinFunction(GL.LINEAR);
+            scene.setMagFunction(GL.LINEAR);
+            
             p.addStimulus(scene);
             sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
             
-            % Use linear interpolation when scaling the image
-            scene.setMinFunction(GL.LINEAR);
-            scene.setMagFunction(GL.LINEAR);
-            
-            obj.centerSigmaSelectionIndex = mod(obj.centerSigmaSelectionIndex + 1,length(obj.centerSigma));
-            obj.annulusSizeSelectionIndex = mod(obj.annulusSizeSelectionIndex + 1,length(obj.annulusSize));
+            obj.centerSigmaSelectionIndex = mod(obj.centerSigmaSelectionIndex,length(obj.centerSigmaSequence)) + 1;
+            obj.annulusSizeSelectionIndex = mod(obj.annulusSizeSelectionIndex,length(obj.annulusSizeSequence)) + 1;
 
-            obj.rfCenterSigma = obj.centerSigmaSequence(obj.centerSigmaSelectionIndex+1);
-            obj.rfSigmaSurround = obj.rfCenterSigma + obj.annulusSizeSequence(obj.annulusSizeSelectionIndex+1);
+            obj.rfSigmaCenter = obj.centerSigmaSequence(obj.centerSigmaSelectionIndex);
+            obj.rfSigmaSurround = obj.rfSigmaCenter + obj.annulusSizeSequence(obj.annulusSizeSelectionIndex);
         end    
    
         function tf = shouldContinuePreparingEpochs(obj)

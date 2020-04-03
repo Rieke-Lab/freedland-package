@@ -72,6 +72,7 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.monitorSize = obj.rig.getDevice('Stage').getCanvasSize();
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
             obj.monitorFrameRate = epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
+            obj.videoSize = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.monitorSize,obj.micronsPerPixel,'PIX2VH');
             
             % Make identify disk radii
             obj.diskRadii_arcmin = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.diskRadii,obj.micronsPerPixel,'UM2VH'));

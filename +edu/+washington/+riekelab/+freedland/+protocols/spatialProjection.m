@@ -97,7 +97,7 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.diskRegionUnits = 'arcmin';
             
             % Create and export movies
-%             projectionNames = generateProjections(obj);
+            projectionNames = generateProjections(obj);
 
             metamerNames = generateMetamers(obj,2);
             compiledFilenames = [projectionNames; metamerNames];

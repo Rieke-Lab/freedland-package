@@ -3,10 +3,13 @@
 classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
-        rfSigmaCenter       = 70;
-        rfSigmaSurround     = 170;
+        rfSigmaCenter       = 70; % in um
+        rfSigmaSurround     = 170; % in um
         diskRadii           = [100,200,300]; % in um
         naturalImages       = [5,81];
+        
+        rawTrajectoryFrequency = 5; % how often to see original image
+        randomize = true
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -17,8 +20,6 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        rfSigmaCenterType = symphonyui.core.PropertyType('char', 'row', {'30','40','50','70','100'}) 
-        rfSigmaSurroundType = symphonyui.core.PropertyType('char', 'row', {'100','130','150','180','210'}) 
         backgroundIntensity
         sequence
         counter
@@ -26,6 +27,7 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
         movieFilenames
         directory
         totalRuns
+        videoLength = 6; % in sec
     end
 
     methods
@@ -44,118 +46,45 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',1);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+            
+            fileSettings = strcat(mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.diskRadii),'\');
                         
-            obj.directory = 'Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies';
+            obj.directory = strcat('Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies\',fileSettings);
             D = dir(obj.directory);
             
-            obj.movieFilenames = [];
-            frequencyCheck = 0;
-            
-            for j = 1:length(obj.referenceImage) % Individual image
-                
-                % Find reference movie
-                refMovie = strcat('img',mat2str(obj.referenceImage(j)),'_raw');
-                for a = 1:size(D,1)
-                    A = D(a).name;
-
-                    if sum(strfind(A,refMovie)) > 0 % Normal trajectory
-                        movieName = A;
-                    end
-                end
-                
-                % Find relevant diskArray videos
-                for b = 1:length(obj.experimentsDiskArray)
-
-                    specificFile = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
-                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsDiskArray(b)),'_projection');
-                    specificFileBlur = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
-                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsDiskArray(b)),'_blur__projection');
-
-                    replacementMovies = [];
-                    
-                    for a = 1:size(D,1)
-                        A = D(a).name;
-
-                        if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
-                            
-                            if mod(frequencyCheck,obj.rawMovieFrequency) == 0
-                                replacementMovies = [replacementMovies;{movieName}];
-                            end
-                                
-                            replacementMovies = [replacementMovies;{A}];
-                            frequencyCheck = frequencyCheck + 1;
-                        end
-                        
-                        if sum(obj.experimentsDiskArray(b) == obj.addBlur) > 0  % Add video with blur into the mix
-                            if sum(strfind(A,specificFileBlur)) > 0
-                                if mod(frequencyCheck,obj.rawMovieFrequency) == 0
-                                    replacementMovies = [replacementMovies;{movieName}];
-                                end
-
-                                replacementMovies = [replacementMovies;{A}];
-                                frequencyCheck = frequencyCheck + 1;
-                            end
-                        end
-                            
-                    end
-
-                    obj.movieFilenames = [obj.movieFilenames;replacementMovies];
-                end
-
-                % Repeat for metamers
-                for b = 1:length(obj.experimentsMetamer)
-
-                    specificFile = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
-                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsMetamer(b)),'_metamer');
-                    specificFileBlur = strcat('img',mat2str(obj.referenceImage(j)),'_',obj.rfSigmaCenter,...
-                        '_',obj.rfSigmaSurround,'_',mat2str(obj.experimentsMetamer(b)),'_blur__metamer');
-
-                    replacementMovies = [];
-                    individualCounter = 0;
-                    individualBlurCounter = 0;
-
-                    for a = 1:size(D,1)
-                        A = D(a).name;
-
-                        if sum(strfind(A,specificFile)) > 0 % Replacement trajectory
-                            
-                            if individualCounter < obj.numberOfMetamers
-                                
-                                if mod(frequencyCheck,obj.rawMovieFrequency) == 0
-                                    replacementMovies = [replacementMovies;{movieName}];
-                                end
-                                
-                                replacementMovies = [replacementMovies;{A}];
-                                frequencyCheck = frequencyCheck + 1;
-                                individualCounter = individualCounter + 1;
-                            end
-                        end
-                        
-                        if sum(obj.experimentsMetamer(b) == obj.addBlur) > 0  % Add video with blur into the mix
-                            if sum(strfind(A,specificFileBlur)) > 0
-                                
-                                if individualBlurCounter < obj.numberOfMetamers
-                                    if mod(frequencyCheck,obj.rawMovieFrequency) == 0
-                                        replacementMovies = [replacementMovies;{movieName}];
-                                    end
-                                    
-                                    replacementMovies = [replacementMovies;{A}];
-                                    frequencyCheck = frequencyCheck + 1;
-                                    individualBlurCounter = individualBlurCounter + 1;
-                                end
-
-                            end
+            % Pull relevant movie filenames
+            filenames = [];
+            rawFilenames = [];
+            for b = 1:length(obj.naturalImages)
+                imgName = strcat('img',mat2str(obj.naturalImages(b)));
+                for a = 1:size(D);
+                    if sum(strfind(D(a).name,imgName)) > 0
+                        if sum(strfind(D(a).name,'raw')) == 0
+                            filenames = [filenames; {D(a).name}];
+                        else
+                            rawFilenames = [rawFilenames; {D(a).name}];
                         end
                     end
-
-                    obj.movieFilenames = [obj.movieFilenames;replacementMovies];
                 end
             end
-
-            obj.totalRuns = size(obj.movieFilenames,1);
+            
+            % Seed in original files
+            obj.movieFilenames = [];
+            frequencyCheck = 0;
+            rawMovieCounter = 1;
+            for a = 1:size(filenames,1)
+                if frequencyCheck == 0;
+                    obj.movieFilenames = [obj.movieFilenames; {rawFilenames{rawMovieCounter,1}}];
+                    rawMovieCounter = mod(rawMovieCounter + 1,size(rawFilenames,1)) + 1;
+                end
+                
+                obj.movieFilenames = [obj.movieFilenames; {filenames{a,1}}];
+                frequencyCheck = mod(frequencyCheck + 1,obj.rawTrajectoryFrequency);
+            end
+            
 
             % Find background intensity
-            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage(1), 1,...
+            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.naturalImages(1), 1,...
                     'amplification', 1,'mirroring', false);
             img = pictureInformation.image;
             img = (img./max(max(img)));
@@ -167,10 +96,6 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
             obj.counter = 1;
-
-            % For identifying a good empirical rawMovieFrequency
-            movieTimings(obj,movieName);
-        
         end
         
         function prepareEpoch(obj, epoch)
@@ -178,7 +103,7 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             
             device = obj.rig.getDevice(obj.amp);
-            duration = (obj.totalStimulusTime) / 1e3;
+            duration = obj.videoLength;
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
@@ -195,7 +120,7 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
         function p = createPresentation(obj)
             
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            p = stage.core.Presentation(obj.totalStimulusTime * 1e-3);
+            p = stage.core.Presentation(obj.videoLength);
 
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity);
@@ -217,30 +142,13 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
             
             obj.counter = obj.counter + 1;
         end
-        
-        function movieTimings(obj,movieName)
-            videoLength = 6; % seconds
-            A = find(strcmp(obj.movieFilenames,movieName));
-            
-            B = [];
-            for a = 1:length(A)
-                B = [B,find(obj.sequence == A(a))];
-            end
-            
-            C = diff(sort(B) .* videoLength / 60);
-            D = strcat('Average time between raw movies:',mat2str(round(mean(C),2)),'minutes.');
-            disp(D)
-            
-            D = strcat('Approximate total stimulus time:',mat2str(length(obj.sequence)* videoLength /60),'minutes.');
-            disp(D)
-        end
 
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages*obj.totalRuns;
+            tf = obj.numEpochsPrepared < length(obj.sequence);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages*obj.totalRuns;
+            tf = obj.numEpochsCompleted < length(obj.sequence);
         end
     end
 end

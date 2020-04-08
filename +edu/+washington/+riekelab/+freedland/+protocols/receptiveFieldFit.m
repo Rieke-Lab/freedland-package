@@ -114,7 +114,7 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             
             % Adjust for ON/OFF cells
             if strcmp(obj.cellClass,'ON')
-                rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast) + obj.backgroundIntensity;
+                rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast);
             elseif strcmp(obj.cellClass,'OFF')
                 rfFilter = (1 - rfFilter) .* (obj.backgroundIntensity .* obj.contrast) + ((1-obj.contrast) .* obj.backgroundIntensity);
             end

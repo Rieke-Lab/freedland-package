@@ -1,4 +1,4 @@
-% Uses cell's RF to find NLs between center/surround
+% Uses cell's RF to find opposed NLs between center/surround
 classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
@@ -8,13 +8,14 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         tailTime = 250 % ms
 
         % Disk sizing and properties
-        diskRadii = [50 100]; % in um. automatically places a disk around the outer edge of the monitor
+        centerDiskRadii = 20:10:80; % in um.
+        annulusDiskRadii = 20:10:80; % in um. Set to 0 to ignore.
+        nearSurroundDiskRadii = 20:10:80; % in um. Set to 0 to ignore.
         contrast = 0.9 % relative to mean (0-1)
         temporalFrequency = 4 % Hz
         
         % Additional options
-        splitField = false 
-        rotation = 0;  % deg (0 to 180)
+        randomize = true;
         backgroundIntensity = 0.168 % (0-1)
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(1) % number of epochs to queue
@@ -24,12 +25,15 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})   
-        diskRadii_PIX
         monitorFrameRate
         micronsPerPixel
         monitorSize
         analysisFigure
         disks
+        counter
+        radii
+        radiiIndex
+        correctDim
     end
 
     methods
@@ -47,133 +51,83 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
-            
-            % M. Turner's online analysis for F1/F2 frequencies
-            if ~strcmp(obj.onlineAnalysis,'none')
-                % custom figure handler
-                if isempty(obj.analysisFigure) || ~isvalid(obj.analysisFigure)
-                    obj.analysisFigure = obj.showFigure('symphonyui.builtin.figures.CustomFigure', @obj.F1F2_PSTH);
-                    f = obj.analysisFigure.getFigureHandle();
-                    set(f, 'Name', 'Cycle avg PSTH');
-                    obj.analysisFigure.userData.runningTrace = 0;
-                    obj.analysisFigure.userData.axesHandle = axes('Parent', f);
-                else
-                    obj.analysisFigure.userData.runningTrace = 0;
-                end
-            end
+            obj.showFigure('edu.washington.riekelab.freedland.figures.contrastDiskSizingFigure',...
+                obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'),...
+                'temporalFrequency',obj.temporalFrequency,'preTime',obj.preTime,'stimTime',obj.stimTime);
             
             % Pull variables
             obj.micronsPerPixel = obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
             obj.monitorSize = obj.rig.getDevice('Stage').getCanvasSize();
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
-            obj.monitorFrameRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
 
             % Identify disk radii
-            obj.diskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.diskRadii,obj.micronsPerPixel,'UM2PIX'));
-            obj.diskRadii_PIX = [0, obj.diskRadii_PIX, round(max(obj.monitorSize)/2)];
+            centerDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.centerDiskRadii,obj.micronsPerPixel,'UM2PIX'));
+            annulusDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.annulusDiskRadii,obj.micronsPerPixel,'UM2PIX'));
+            nearSurroundDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.nearSurroundDiskRadii,obj.micronsPerPixel,'UM2PIX'));
+            farSurroundDiskRadii_PIX = round(max(obj.monitorSize)/2);
             
-            % Make disks
-            [xx,yy] = meshgrid(1:obj.monitorSize(2),1:obj.monitorSize(1));
-            r = sqrt((xx - obj.monitorSize(2)/2).^2 + (yy - obj.monitorSize(1)/2).^2); 
-            
-            obj.disks = zeros(obj.monitorSize(1),obj.monitorSize(2),length(obj.diskRadii_PIX)-1);
-            for a = 1:length(obj.diskRadii_PIX)-1
-                obj.disks(:,:,a) = r > obj.diskRadii_PIX(a) & r < obj.diskRadii_PIX(a+1);
+            % We can only search along one dimension at a time.
+            errorCheck = [length(centerDiskRadii_PIX),length(annulusDiskRadii_PIX),...
+                length(nearSurroundDiskRadii_PIX),length(farSurroundDiskRadii_PIX)];
+            if sum(errorCheck > 1) > 1
+                error('A vector can only be present for the center, annulus, or near-surround radius. Not multiple.')
             end
             
-            if obj.splitField == true;
-                
-                % Define theta space
-                th = atan((xx - obj.monitorSize(2)/2) ./ (yy - obj.monitorSize(1)/2));
-                th = abs(th-pi/2);              
-                nonsmooth = find(diff(th) > pi/2,1);
-                th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
-                th = rad2deg(th);
-                
-                % Region for split field
-                actualRotation = 180 - obj.rotation;
-                overmask = th > actualRotation & th < actualRotation+180;
-                invOvermask = overmask == 0;
-                
-                % Split masks
-                set1 = obj.disks .* repmat(overmask,1,1,size(obj.disks,3));
-                set2 = obj.disks .* repmat(invOvermask,1,1,size(obj.disks,3));
-                obj.disks = cat(3,set1,set2);
-                
-                % Ensure adjacent disks are contrast reversing
-                diskTotal = size(set1,3);
-                partialOrder = [1 1+diskTotal];
-                order = []; % Not large enough to bother pre-allocating.
-                counter = 1;
-                for a = 1:diskTotal
-                    specificOrder = partialOrder + (counter-1)*2;
-                    if mod(a,2) == 1
-                        order = [order specificOrder];
-                    else
-                        order = [order  fliplr(specificOrder+1)];
-                        counter = counter + 1;
-                    end
-                end
+            % Find true radius and ignore regions
+            obj.radii = [centerDiskRadii_PIX(1),annulusDiskRadii_PIX(1),nearSurroundDiskRadii_PIX(1),farSurroundDiskRadii_PIX(1)];
+            obj.radii(obj.radii == 0) = [];
+            obj.radii = [0, obj.radii];
+            
+            % For sequences to iteratively test
+            obj.radiiIndex = find(errorCheck > 1);
+            
+            if isempty(obj.radiiIndex)
+                obj.radiiIndex = 1;
+            end
+            
+            % Identify correct value to change
+            obj.sequence = 1:errorCheck(obj.radiiIndex);
+            if obj.radiiIndex <= 1
+                obj.correctDim = centerDiskRadii_PIX;
+            elseif obj.radiiIndex == 2
+                obj.correctDim = annulusDiskRadii_PIX;
+            elseif obj.radiiIndex == 3
+                obj.correctDim = nearSurroundDiskRadii_PIX;
+            end
+            obj.radiiIndex = obj.radiiIndex + 1;
+            
+            % Account for repeats
+            obj.sequence = repmat(obj.sequence,1,obj.numberOfAverages);
 
-                % Order disks by contrast
-                obj.disks = obj.disks(:,:,order);
+            if obj.randomize == true
+                obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
-        end
-        
-        function F1F2_PSTH(obj, ~, epoch) %online analysis function
-
-            % Function by M. Turner
-            response = epoch.getResponse(obj.rig.getDevice(obj.amp));
-            quantities = response.getData();
-            sampleRate = response.sampleRate.quantityInBaseUnits;
+            obj.counter = 1;
             
-            axesHandle = obj.analysisFigure.userData.axesHandle;
-            runningTrace = obj.analysisFigure.userData.runningTrace;
-            
-            if strcmp(obj.onlineAnalysis,'extracellular') %spike recording
-                filterSigma = (20/1000)*sampleRate; %msec -> dataPts
-                newFilt = normpdf(1:10*filterSigma,10*filterSigma/2,filterSigma);
-                res = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(quantities,[],sampleRate);
-                epochResponseTrace = zeros(size(quantities));
-                epochResponseTrace(res.sp) = 1; %spike binary
-                epochResponseTrace = sampleRate*conv(epochResponseTrace,newFilt,'same'); %inst firing rate
-            else %intracellular - Vclamp
-                epochResponseTrace = quantities-mean(quantities(1:sampleRate*obj.preTime/1000)); %baseline
-                if strcmp(obj.onlineAnalysis,'exc') %measuring exc
-                    epochResponseTrace = epochResponseTrace./(-60-0); %conductance (nS), ballpark
-                elseif strcmp(obj.onlineAnalysis,'inh') %measuring inh
-                    epochResponseTrace = epochResponseTrace./(0-(-60)); %conductance (nS), ballpark
-                end
-            end
-            
-            noCycles = floor(obj.temporalFrequency*obj.stimTime/1000);
-            period = (1/obj.temporalFrequency)*sampleRate; %data points
-            epochResponseTrace(1:(sampleRate*obj.preTime/1000)) = []; %cut out prePts
-            cycleAvgResp = 0;
-            for c = 1:noCycles
-                cycleAvgResp = cycleAvgResp + epochResponseTrace((c-1)*period+1:c*period);
-            end
-            cycleAvgResp = cycleAvgResp./noCycles;
-            timeVector = (1:length(cycleAvgResp))./sampleRate; %sec
-            runningTrace = runningTrace + cycleAvgResp;
-            cla(axesHandle);
-            h = line(timeVector, runningTrace./obj.numEpochsCompleted, 'Parent', axesHandle);
-            set(h,'Color',[0 0 0],'LineWidth',2);
-            xlabel(axesHandle,'Time (s)')
-            title(axesHandle,'Running cycle average...')
-            if strcmp(obj.onlineAnalysis,'extracellular')
-                ylabel(axesHandle,'Spike rate (Hz)')
-            else
-                ylabel(axesHandle,'Resp (nS)')
-            end
-            obj.analysisFigure.userData.runningTrace = runningTrace;
+            % Make adjustment to radii
+            specificRadii = obj.correctDim(obj.sequence(obj.counter));
+            obj.radii(obj.radiiIndex) = specificRadii;
         end
         
         function p = createPresentation(obj)
             
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
+            
+            % Get next iteration
+            specificRadii = obj.correctDim(obj.sequence(obj.counter));
+            obj.radii(obj.radiiIndex) = specificRadii;
+            obj.counter = obj.counter + 1;
+            
+            % Make disks
+            [xx,yy] = meshgrid(1:obj.monitorSize(2),1:obj.monitorSize(1));
+            r = sqrt((xx - obj.monitorSize(2)/2).^2 + (yy - obj.monitorSize(1)/2).^2); 
+            obj.disks = zeros(obj.monitorSize(1),obj.monitorSize(2),length(obj.radii)-1);
+            for a = 1:length(obj.radii)-1
+                obj.disks(:,:,a) = r > obj.radii(a) & r < obj.radii(a+1);
+            end
 
+            % Add contrast reversing gratings
             for a = 1:size(obj.disks,3)
                 grate = stage.builtin.stimuli.Grating('square'); % Square wave grating
                 grate.size = fliplr(obj.monitorSize);
@@ -217,6 +171,10 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
+            
+            epoch.addParameter('radii_pixels', obj.radii);
+            epoch.addParameter('radii_um', edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.radii,obj.micronsPerPixel,'PIX2UM'));
+            epoch.addParameter('radii_dimension', obj.radiiIndex);
         end
         
         %same presentation each epoch in a run. Replay.
@@ -230,11 +188,11 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages;
+            tf = obj.numEpochsPrepared < obj.sequence;
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages;
+            tf = obj.numEpochsCompleted < obj.sequence;
         end
         
     end

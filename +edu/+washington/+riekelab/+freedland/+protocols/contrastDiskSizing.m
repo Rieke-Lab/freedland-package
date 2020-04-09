@@ -8,14 +8,14 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         tailTime = 250 % ms
 
         % Disk sizing and properties
-        centerDiskRadii = 20:10:80; % in um.
-        annulusDiskRadii = 20:10:80; % in um. Set to 0 to ignore.
-        nearSurroundDiskRadii = 20:10:80; % in um. Set to 0 to ignore.
+        centerDiskRadii = [20 30]; % in um.
+        annulusDiskRadii = [50 60]; % in um. Set to 0 to ignore.
+        nearSurroundDiskRadii = [80 100]; % in um. Set to 0 to ignore.
         contrast = 0.9 % relative to mean (0-1)
         temporalFrequency = 4 % Hz
         
         % Additional options
-        randomize = true;
+        randomize = false;
         backgroundIntensity = 0.168 % (0-1)
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(1) % number of epochs to queue
@@ -34,6 +34,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         radii
         radiiIndex
         correctDim
+        sequence
     end
 
     methods
@@ -52,8 +53,8 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             obj.showFigure('edu.washington.riekelab.freedland.figures.contrastDiskSizingFigure',...
-                obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'),...
-                'temporalFrequency',obj.temporalFrequency,'preTime',obj.preTime,'stimTime',obj.stimTime);
+                obj.rig.getDevice(obj.amp),'temporalFrequency',obj.temporalFrequency,...
+                'preTime',obj.preTime,'stimTime',obj.stimTime);
             
             % Pull variables
             obj.micronsPerPixel = obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel');
@@ -84,7 +85,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             if isempty(obj.radiiIndex)
                 obj.radiiIndex = 1;
             end
-            
+
             % Identify correct value to change
             obj.sequence = 1:errorCheck(obj.radiiIndex);
             if obj.radiiIndex <= 1
@@ -103,10 +104,6 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
             obj.counter = 1;
-            
-            % Make adjustment to radii
-            specificRadii = obj.correctDim(obj.sequence(obj.counter));
-            obj.radii(obj.radiiIndex) = specificRadii;
         end
         
         function p = createPresentation(obj)
@@ -172,27 +169,21 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             
-            epoch.addParameter('radii_pixels', obj.radii);
-            epoch.addParameter('radii_um', edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.radii,obj.micronsPerPixel,'PIX2UM'));
+            specificRadii = obj.radii;
+            changedVal = obj.correctDim(obj.sequence(obj.counter));
+            specificRadii(obj.radiiIndex) = changedVal;
+
+            epoch.addParameter('radii_pixels', specificRadii);
+            epoch.addParameter('radii_um', round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(specificRadii,obj.micronsPerPixel,'PIX2UM')));
             epoch.addParameter('radii_dimension', obj.radiiIndex);
         end
         
-        %same presentation each epoch in a run. Replay.
-        function controllerDidStartHardware(obj)
-            controllerDidStartHardware@edu.washington.riekelab.protocols.RiekeLabProtocol(obj);
-            if (obj.numEpochsCompleted >= 1) && (obj.numEpochsCompleted < obj.numberOfAverages)
-                obj.rig.getDevice('Stage').replay
-            else
-                obj.rig.getDevice('Stage').play(obj.createPresentation());
-            end
-        end
-        
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.sequence;
+            tf = obj.numEpochsPrepared < length(obj.sequence);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.sequence;
+            tf = obj.numEpochsCompleted < length(obj.sequence);
         end
         
     end

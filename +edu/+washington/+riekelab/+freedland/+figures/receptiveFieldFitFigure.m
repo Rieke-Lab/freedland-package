@@ -59,8 +59,8 @@ classdef receptiveFieldFitFigure < symphonyui.core.FigureHandler
             response = epoch.getResponse(obj.ampDevice);
             epochResponseTrace = response.getData();
             sampleRate = response.sampleRate.quantityInBaseUnits;
-            
-            if strcmp(obj.type,'center sigma')
+
+            if strfind(obj.type,'center') > 0
                 currentSpotSize = epoch.parameters('rfSigmaCenter');
             else
                 currentSpotSize = epoch.parameters('rfSigmaSurround');

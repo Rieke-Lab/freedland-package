@@ -6,12 +6,13 @@ classdef contrastDiskSizingFigure < symphonyui.core.FigureHandler
         ampDevice
         preTime
         stimTime
-        type
+        temporalFrequency
     end
     
     properties (Access = private)
         axesHandle
         lineHandle
+        lineHandle2
         fitLineHandle
         allFirstPeriod
         allSecondPeriod
@@ -38,20 +39,26 @@ classdef contrastDiskSizingFigure < symphonyui.core.FigureHandler
         
         function createUi(obj)
             import appbox.*;
+            iconDir = [fileparts(fileparts(mfilename('fullpath'))), '\+utils\+icons\'];
+            toolbar = findall(obj.figureHandle, 'Type', 'uitoolbar');
             
             obj.axesHandle = axes( ...
                 'Parent', obj.figureHandle, ...
                 'FontName', get(obj.figureHandle, 'DefaultUicontrolFontName'), ...
                 'FontSize', get(obj.figureHandle, 'DefaultUicontrolFontSize'), ...
                 'XTickMode', 'auto');
-            xlabel(obj.axesHandle, obj.type);
+            xlabel(obj.axesHandle, 'radius (um)');
             ylabel(obj.axesHandle, 'total spikes');
-            title(obj.axesHandle,'find intersection');
+            
+            intersectionButton = uipushtool( ...
+                'Parent', toolbar, ...
+                'TooltipString', 'intersection', ...
+                'Separator', 'on', ...
+                'ClickedCallback', @obj.intersection);
+            setIconImage(intersectionButton, [iconDir, 'DoG.png']);
         end
 
-        
         function handleEpoch(obj, epoch)
-            
             % Load amp data
             response = epoch.getResponse(obj.ampDevice);
             epochResponseTrace = response.getData();
@@ -61,20 +68,19 @@ classdef contrastDiskSizingFigure < symphonyui.core.FigureHandler
             stimPts = sampleRate*obj.stimTime/1000;
             iterations = obj.stimTime/1000 .* obj.temporalFrequency;
             iterationPts = stimPts / iterations; % Each cycle
+            halfway = round(iterationPts / 2);
             
-            epochResponseTrace = epochResponseTrace(prePts:prePts+stimPts);
+            epochResponseTrace = epochResponseTrace(prePts:(prePts+stimPts));
 
             S = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(epochResponseTrace);
-            
+
             newEpochResponse = zeros(iterations,2);
             for a = 1:iterations
-                range = (a - 1) * iterationPts + 1 : a*iterationPts;
-                cycle = S.sp(range);
-                
-                halfway = round(iterationPts / 2);
-                newEpochResponse(a,1) = sum(cycle(1:halfway)); % First half-period
-                newEpochResponse(a,2) = sum(cycle(halfway:end)); % Second half-period
+                firstPt = ((a - 1) * iterationPts) + 1;
+                newEpochResponse(a,1) = sum(S.sp > firstPt & S.sp < (firstPt + halfway));
+                newEpochResponse(a,2) = sum(S.sp > (firstPt + halfway) & S.sp < (firstPt + iterationPts));
             end
+
             newEpochResponse = nanmean(newEpochResponse,1); % Average over cycle
             
             % Pull associated parameter
@@ -97,16 +103,37 @@ classdef contrastDiskSizingFigure < symphonyui.core.FigureHandler
             if isempty(obj.lineHandle)
                 obj.lineHandle = line(obj.summaryData.spotSizes, obj.summaryData.meanResponsesFirst,...
                     'Parent', obj.axesHandle,'Color','r','Marker','o');
-                obj.lineHandle = line(obj.summaryData.spotSizes, obj.summaryData.meanResponsesSecond,...
+                obj.lineHandle2 = line(obj.summaryData.spotSizes, obj.summaryData.meanResponsesSecond,...
                     'Parent', obj.axesHandle,'Color','b','Marker','o');
             else
                 set(obj.lineHandle, 'XData', obj.summaryData.spotSizes,...
                     'YData', obj.summaryData.meanResponsesFirst);
-                set(obj.lineHandle, 'XData', obj.summaryData.spotSizes,...
+                set(obj.lineHandle2, 'XData', obj.summaryData.spotSizes,...
                     'YData', obj.summaryData.meanResponsesSecond);
             end
         end
         
+    end
+    
+     methods (Access = private)
+        
+        function intersection(obj, ~, ~)
+            x = obj.lineHandle.XData;
+            y1 = obj.lineHandle.YData;
+            y2 = obj.lineHandle2.YData;
+            
+            resolution = 0.1; % um
+            xq = min(x):resolution:max(x);
+            
+            y1_i = interp1(x,y1,xq);
+            y2_i = interp1(x,y2,xq);
+
+            crossZero = abs(diff(sign(y1_i - y2_i))) > 0;
+            crossZero = unique(round(xq(crossZero)));
+            
+            title(obj.axesHandle,num2str(crossZero));
+        end
+
     end
     
 end

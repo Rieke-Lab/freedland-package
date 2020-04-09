@@ -57,7 +57,7 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
             rawFilenames = [];
             for b = 1:length(obj.naturalImages)
                 imgName = strcat('img',mat2str(obj.naturalImages(b)));
-                for a = 1:size(D);
+                for a = 1:size(D)
                     if sum(strfind(D(a).name,imgName)) > 0
                         if sum(strfind(D(a).name,'raw')) == 0
                             filenames = [filenames; {D(a).name}];
@@ -73,7 +73,7 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
             frequencyCheck = 0;
             rawMovieCounter = 1;
             for a = 1:size(filenames,1)
-                if frequencyCheck == 0;
+                if frequencyCheck == 0
                     obj.movieFilenames = [obj.movieFilenames; {rawFilenames{rawMovieCounter,1}}];
                     rawMovieCounter = mod(rawMovieCounter + 1,size(rawFilenames,1)) + 1;
                 end

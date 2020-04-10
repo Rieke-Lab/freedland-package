@@ -113,10 +113,10 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.filenames = [];
             c = 1;
             for a = 1:size(compiledFilenames,1)
-                obj.filenames = [obj.filenames compiledFilenames{a,1}];
+                obj.filenames = [obj.filenames {compiledFilenames{a,1}}];
                 
                 if mod(a,frequency) == 0
-                    obj.filenames = [obj.filenames rawMovieNames{c,1}];
+                    obj.filenames = [obj.filenames {rawMovieNames{c,1}}];
                     c = mod(c,2) + 1;
                 end
             end
@@ -130,7 +130,7 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
         end
         
         function prepareEpoch(obj, epoch)
-            prepareEpoch@edu.washington.riekelab.freedland.protocols.RFDiskArrayProtocol(obj, epoch);
+            prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             
             device = obj.rig.getDevice(obj.amp);
             duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
@@ -337,11 +337,11 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
    
    
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < (obj.numberOfAverages*obj.trials);
+            tf = obj.numEpochsPrepared < length(obj.sequence);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < (obj.numberOfAverages*obj.trials);
+            tf = obj.numEpochsCompleted < length(obj.sequence);
         end
         
     end

@@ -26,7 +26,7 @@ function exportMovie(obj,specificMovie,filename)
     end
 
     % Export as MPEG-4. 
-    directory = '/Users/Julian/Desktop/GitHub/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
+    directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
     v = VideoWriter(strcat(directory,filename),'MPEG-4');
     v.FrameRate = obj.monitorFrameRate;
 

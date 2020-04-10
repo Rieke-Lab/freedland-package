@@ -120,5 +120,5 @@ function [newTraj, diskValues, masks] = linearEquivalency(obj, weightedTrajector
     
     % Add surrounding mask
     surroundMask = (sum(masks,3) == 0);
-    newTraj = newTraj + surroundMask .* obj.backgroundIntensity;
+    newTraj = newTraj + repmat(surroundMask .* obj.backgroundIntensity,1,1,1,size(newTraj,4));
 end

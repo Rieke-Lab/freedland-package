@@ -75,7 +75,7 @@ function filenames = metamerGeneration(obj, filename, varargin)
     
     disp('Exporting movies...')
     if ip.Results.exportRawMovie == true
-        filename_adj = strcat('img',string(obj.imageNo),'_raw');
+        filename_adj = strcat('img',mat2str(obj.imageNo),'_raw');
         edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.exportMovie(obj,stimulus.raw,filename_adj)
     end
     
@@ -88,7 +88,7 @@ function filenames = metamerGeneration(obj, filename, varargin)
     
     if ~isequal(filename,0)
         for a = 1:size(stimulus.metamer,5)
-            filename_adj = strcat(filename,'_metamer_',string(a));
+            filename_adj = strcat(filename,'_metamer_',mat2str(a));
             filenames = [filenames;filename_adj];
             edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.exportMovie(obj,stimulus.metamer(:,:,:,:,a),filename_adj)
         end

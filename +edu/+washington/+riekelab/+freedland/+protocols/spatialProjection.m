@@ -124,7 +124,7 @@ classdef spatialProjection < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.counter = 1;
             obj.sequence = repmat(1:size(obj.filenames,1),1,obj.numberOfAverages);
             
-            if obj.randomize == true
+            if obj.randomizeOrder == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
         end

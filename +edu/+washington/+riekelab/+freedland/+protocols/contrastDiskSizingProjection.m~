@@ -1,12 +1,10 @@
 % Replace a natural movie with a variety of integrated disks.
 % By J. Freedland, 2019.
-classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef contrastDiskSizingProjection < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
         rfSigmaCenter       = 70; % in um
         rfSigmaSurround     = 170; % in um
-        diskRadii           = [100,200,300]; % in um
-        naturalImages       = [5,81];
         
         rawTrajectoryFrequency = 5; % how often to see original image
         randomize = true
@@ -47,38 +45,32 @@ classdef spatialProjectionPreRendered < edu.washington.riekelab.protocols.RiekeL
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
-            fileSettings = strcat(mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround),'_',mat2str(obj.diskRadii),'\');
+            fileSettings = strcat(mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround),'diskSizeTest');
                         
-            obj.directory = strcat('Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies\',fileSettings);
+            % Load all pre-rendered movie architectures
+            obj.directory = strcat('Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies\diskSizingTest',fileSettings);
             D = dir(obj.directory);
+            
+            % Load raw trajectory
+            raw = 'Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies\diskSizingTest\img81_raw.mp4';
             
             % Pull relevant movie filenames
             filenames = [];
-            rawFilenames = [];
-            for b = 1:length(obj.naturalImages)
-                imgName = strcat('img',mat2str(obj.naturalImages(b)));
-                for a = 1:size(D)
-                    if sum(strfind(D(a).name,imgName)) > 0
-                        if sum(strfind(D(a).name,'raw')) == 0
-                            filenames = [filenames; {D(a).name}];
-                        else
-                            rawFilenames = [rawFilenames; {D(a).name}];
-                        end
-                    end
+            for a = 1:size(D)
+                if sum(strfind(D(a).name,'.mp4')) > 0
+                    filenames = [filenames; {D(a).name}];
                 end
             end
             
             % Seed in original files
             obj.movieFilenames = [];
             frequencyCheck = 0;
-            rawMovieCounter = 1;
             for a = 1:size(filenames,1)
                 if frequencyCheck == 0
-                    obj.movieFilenames = [obj.movieFilenames; {rawFilenames{rawMovieCounter,1}}];
-                    rawMovieCounter = mod(rawMovieCounter + 1,size(rawFilenames,1)) + 1;
+                    obj.movieFilenames = [obj.movieFilenames; {raw}];
                 end
                 
-                obj.movieFilenames = [obj.movieFilenames; {filenames{a,1}}];
+                obj.movieFilenames = [obj.movieFilenames; {[filenames{a,1}}];
                 frequencyCheck = mod(frequencyCheck + 1,obj.rawTrajectoryFrequency);
             end
             

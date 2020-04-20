@@ -110,7 +110,7 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.videoSize = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.monitorSize,obj.micronsPerPixel,'PIX2VH');
 
             % Pull filter
-            rfFilter = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.calculateFilter(obj);
+            rfFilter = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.calculateFilter(obj,true);
             
             % Adjust for ON/OFF cells
             if strcmp(obj.cellClass,'ON')

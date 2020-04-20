@@ -123,7 +123,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             r = sqrt((xx - obj.monitorSize(2)/2).^2 + (yy - obj.monitorSize(1)/2).^2); 
             obj.disks = zeros(obj.monitorSize(1),obj.monitorSize(2),length(obj.radii)-1);
             for a = 1:length(obj.radii)-1
-                obj.disks(:,:,a) = r >= obj.radii(a) & r < obj.radii(a+1);
+                obj.disks(:,:,a) = r > obj.radii(a) & r < obj.radii(a+1);
             end
             
             % Add cuts as neccessary
@@ -145,27 +145,28 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 end
                 overmask(:,:,4) = abs(1 - sum(overmask,3)); % Ignores mod360 annoyances
 
-                % Split masks and arrange to be contrast-reversing
-                cutDisks = zeros(size(obj.disks,1),size(obj.disks,2),size(overmask,3)*size(obj.disks,3));
-                order = 1:size(obj.disks,3);
-                counter2 = 1;
-                for a = [1 3]
-                    for b = order
-                        cutDisks(:,:,counter2) = obj.disks(:,:,b) .* overmask(:,:,a);
-                        counter2 = counter2 + 1;
+                % Split masks
+                set1 = obj.disks .* repmat(overmask,1,1,size(obj.disks,3));
+                set2 = obj.disks .* repmat(invOvermask,1,1,size(obj.disks,3));
+                obj.disks = cat(3,set1,set2);
+
+                % Ensure adjacent disks are contrast reversing
+                diskTotal = size(set1,3);
+                partialOrder = [1 1+diskTotal];
+                order = []; % Not large enough to bother pre-allocating.
+                counter = 1;
+                for a = 1:diskTotal
+                    specificOrder = partialOrder + (counter-1)*2;
+                    if mod(a,2) == 1
+                        order = [order specificOrder];
+                    else
+                        order = [order  fliplr(specificOrder+1)];
+                        counter = counter + 1;
                     end
                 end
-                
-                % Switch order so regions are distinct
-                altOrder = [order(2:end) order(1)];
-                for a = [2 4]
-                    for b = altOrder
-                        cutDisks(:,:,counter2) = obj.disks(:,:,b) .* overmask(:,:,a);
-                        counter2 = counter2 + 1;
-                    end
-                end
-                
-                obj.disks = cutDisks;
+
+                % Order disks by contrast
+                obj.disks = obj.disks(:,:,order);
             end
 
             % Add contrast reversing gratings

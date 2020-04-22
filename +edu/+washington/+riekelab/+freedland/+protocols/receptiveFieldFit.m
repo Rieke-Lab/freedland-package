@@ -90,7 +90,7 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-
+            
             epoch.addParameter('rfSigmaCenter', obj.rfSigmaCenter);
             epoch.addParameter('rfSigmaSurround', obj.rfSigmaSurround);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity)

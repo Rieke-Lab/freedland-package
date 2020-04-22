@@ -13,11 +13,11 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         nearSurroundDiskRadii = [80 100]; % in um. Set to 0 to ignore.
         contrast = 0.9 % relative to mean (0-1)
         temporalFrequency = 4 % Hz
+        subunitSlices = false; % slices each disk into 4 quadrants
         
         % Additional options
         randomize = false;
         backgroundIntensity = 0.168 % (0-1)
-        subunitSlices = false; % slices each disk into 4 quadrants
         rotation = 0; % 0 to 90
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(1) % number of epochs to queue
@@ -74,6 +74,10 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 length(nearSurroundDiskRadii_PIX),length(farSurroundDiskRadii_PIX)];
             if sum(errorCheck > 1) > 1
                 error('A vector can only be present for the center, annulus, or near-surround radius. Not multiple.')
+            end
+            
+            if obj.subunitSlices == true && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
+                error('Must have prerender set') 
             end
             
             % Find true radius and ignore regions

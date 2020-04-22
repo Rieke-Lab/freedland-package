@@ -45,10 +45,10 @@ classdef contrastDiskSizingProjection < edu.washington.riekelab.protocols.RiekeL
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
-            fileSettings = strcat(mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround),'diskSizeTest');
+            fileSettings = strcat(mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround),'_diskSizeTest');
                         
             % Load all pre-rendered movie architectures
-            obj.directory = strcat('Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies\diskSizingTest',fileSettings);
+            obj.directory = strcat('Documents\freedland-package\+edu\+washington\+riekelab\+freedland\+movies\diskSizingTest\',fileSettings);
             D = dir(obj.directory);
             
             % Load raw trajectory
@@ -74,9 +74,8 @@ classdef contrastDiskSizingProjection < edu.washington.riekelab.protocols.RiekeL
                 frequencyCheck = mod(frequencyCheck + 1,obj.rawTrajectoryFrequency);
             end
             
-
             % Find background intensity
-            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.naturalImages(1), 1,...
+            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(81, 1,...
                     'amplification', 1,'mirroring', false);
             img = pictureInformation.image;
             img = (img./max(max(img)));
@@ -100,7 +99,9 @@ classdef contrastDiskSizingProjection < edu.washington.riekelab.protocols.RiekeL
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             
-            epoch.addParameter('movieName',obj.movieFilenames{obj.sequence(obj.counter),1});
+            fullName = obj.movieFilenames{obj.sequence(obj.counter),1};
+            A = strfind(fullName,'img81');
+            epoch.addParameter('movieName',fullName(A:end));
 
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));

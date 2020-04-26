@@ -1,23 +1,13 @@
 % Replace a natural movie with a variety of integrated disks.
 % By J. Freedland, 2019.
-classdef RFFull < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
-        % Basics
-        totalStimulusTime = 6000; % in ms
-        referenceImage = [5,81]; % image to build metamer for.
-        
-        % Arrangement of disks
-        experimentsDiskArray = 1:15  % Number of experimental movies to show
-        experimentsMetamer = [8,9,12,13,15]; % Pre-determined model number to show replacement over.
-        addBlur = [12, 15]; % experiments to add Gaussian blur to (both diskArray and metamer)
-        
         % RF field information
         rfSigmaCenter = '30'; % (um) enter from difference of gaussians fit for overlaying receptive field.
         rfSigmaSurround = '100'; % (um) enter from difference of gaussians fit for overlaying receptive field.
 
         randomize = true; % whether to randomize movies shown
-        numberOfMetamers = 2; % number of distinct metamers to show
         rawMovieFrequency = 3; % How often should we show the original movie amongst experimental movies? (i.e, 3 = every 3 experimental movies, we show 1 raw movie).
 
         % Additional parameters

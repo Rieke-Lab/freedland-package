@@ -80,7 +80,7 @@ classdef FrameTimingFigure < symphonyui.core.FigureHandler
 
             if abs(ideal-minDuration)/ideal > 0.10 || abs(ideal-maxDuration)/ideal > 0.10
                 lineColor = 'r';
-                epoch.addKeyword('badFrameTiming');
+                epoch.addParameter('badFrameTiming',1);
             else
                 lineColor = 'b';
             end

@@ -9,8 +9,8 @@
 function [normFilter,f,f_um] = calculateFilter(obj,normalization)
 
     % Convert neuron's RF to DOVES VH units.
-    centerSigmaPix =  edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.rfSigmaCenter,obj.micronsPerPixel,'UM2VH');
-    surroundSigmaPix = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.rfSigmaSurround,obj.micronsPerPixel,'UM2VH');
+    centerSigmaPix = retinalMetamers.utils.changeUnits(obj.rfSigmaCenter,obj.micronsPerPixel,'UM2VH');
+    surroundSigmaPix = retinalMetamers.utils.changeUnits(obj.rfSigmaSurround,obj.micronsPerPixel,'UM2VH');
 
     % Generate 2D gaussians
     centerGaus = fspecial('gaussian',[obj.videoSize(1) obj.videoSize(2)],centerSigmaPix);
@@ -29,19 +29,19 @@ function [normFilter,f,f_um] = calculateFilter(obj,normalization)
     % Calculate specific regions
     f = cell(7,2);
     
-    f{1,1} = 'Maximally inhibitory';
-    [~,f{1,2}] = min(slice);    % Maximally inhibitory
+    f{2,1} = 'Maximally inhibitory';
+    [~,f{2,2}] = min(slice); % Location with largest inhibitory response.
     
-    f{2,1} = 'Zero point';
-    [~,f{2,2}] = min(abs(slice(1:f{1,2})));    % Maximally inhibitory
+    f{1,1} = 'Zero point';
+    [~,f{1,2}] = min(abs(slice(1:f{2,2}))); % Where excitatory response switches to inhibitory.
     
-    f{3,1} = 'Strongest [excitatory inhibitory] curvature';
+    f{3,1} = 'Largest [excitatory inhibitory] curvature';
     [~,a] = min(curvature);     % Excitatory curvature
     [~,b] = max(curvature);     % Inhibitory curvature
     f{3,2} = [a b];
-    
-    f{4,1} = 'Excitatory/inhibitory balance point (integrated)';
-    [~,f{4,2}] = min(abs(tot(1:f{1,2}) - tot(end)));
+
+    f{4,1} = 'Excitatory/inhibitory balance point';
+    [~,f{4,2}] = min(abs(tot(1:f{2,2}) - tot(end))); % Where total excitation = total inhibition
     
     f{5,1} = '% Excitatory';
     range = 5:5:95;
@@ -54,10 +54,10 @@ function [normFilter,f,f_um] = calculateFilter(obj,normalization)
     f{6,1} = '% Inhibitory';
     range = 5:5:95;
     percentage = zeros(1,length(range));
-    regime = (1 - tot(f{2,2}:end)) / (1-tot(end));
+    regime = (1 - tot(f{1,2}:end)) / (1-tot(end)); % Only consider inhibitory region
     for a = 1:length(range)
         [~,percentage(a)] = min(abs(regime - range(a)/100));
-        percentage(a) = percentage(a) + f{2,2};
+        percentage(a) = percentage(a) + f{1,2};
     end
     f{6,2} = [range; percentage];
     
@@ -67,7 +67,7 @@ function [normFilter,f,f_um] = calculateFilter(obj,normalization)
     % Convert to microns (from pixels)
     f_um = f;
     for a = 1:6
-        f_um{a,2} = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(f_um{a,2},obj.micronsPerPixel,'VH2UM');
+        f_um{a,2} = retinalMetamers.utils.changeUnits(f_um{a,2},obj.micronsPerPixel,'VH2UM');
     end
     f_um{5,2}(1,:) = f{5,2}(1,:); % Percentages do not change
     f_um{6,2}(1,:) = f{6,2}(1,:);
@@ -79,7 +79,7 @@ function [normFilter,f,f_um] = calculateFilter(obj,normalization)
         normFilter = normFilter ./ max(normFilter(:)); % Renormalize
     end
 
-    % To visualize this region, uncomment:
+% %     To visualize this region, uncomment:
 %     figure(1)
 %     umWidth = retinalMetamers.utils.changeUnits(1:length(slice),obj.micronsPerPixel,'VH2UM');
 %     plot(umWidth,slice)

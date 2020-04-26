@@ -64,9 +64,9 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
 
             % Identify disk radii
-            centerDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.centerDiskRadii,obj.micronsPerPixel,'UM2PIX'));
-            annulusDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.annulusDiskRadii,obj.micronsPerPixel,'UM2PIX'));
-            nearSurroundDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.nearSurroundDiskRadii,obj.micronsPerPixel,'UM2PIX'));
+            centerDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.centerDiskRadii,obj.micronsPerPixel,'UM2PIX'));
+            annulusDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.annulusDiskRadii,obj.micronsPerPixel,'UM2PIX'));
+            nearSurroundDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.nearSurroundDiskRadii,obj.micronsPerPixel,'UM2PIX'));
             farSurroundDiskRadii_PIX = round(max(obj.monitorSize)/2);
             
             % We can only search along one dimension at a time.
@@ -222,7 +222,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             specificRadii(obj.radiiIndex) = changedVal;
 
             epoch.addParameter('radii_pixels', specificRadii);
-            epoch.addParameter('radii_um', round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(specificRadii,obj.micronsPerPixel,'PIX2UM')));
+            epoch.addParameter('radii_um', round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(specificRadii,obj.micronsPerPixel,'PIX2UM')));
             epoch.addParameter('radii_dimension', obj.radiiIndex);
         end
         

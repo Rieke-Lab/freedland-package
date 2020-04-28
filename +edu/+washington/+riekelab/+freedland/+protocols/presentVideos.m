@@ -52,7 +52,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Find correct folder
             seedName = [mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround)];
             for a = 1:length(D)
-                if contains(D(a).name,seedName)
+                if strfind(D(a).name,seedName) > 0
                     folderName = D(a).name;
                 end
             end
@@ -84,11 +84,11 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 end
                 
                 obj.movieFilenames = [obj.movieFilenames; {testMovies{a,1}}];
-                frequencyCheck = mod(frequencyCheck + 1,obj.rawTrajectoryFrequency);
+                frequencyCheck = mod(frequencyCheck + 1,obj.rawMovieFrequency);
             end
             
             % Find background intensity
-            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(obj.referenceImage(1), 1,...
+            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(81, 1,...
                     'amplification', 1,'mirroring', false);
             img = pictureInformation.image;
             img = (img./max(max(img)));
@@ -111,7 +111,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             
             device = obj.rig.getDevice(obj.amp);
-            duration = (obj.totalStimulusTime) / 1e3;
+            duration = 6;
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
@@ -128,7 +128,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         function p = createPresentation(obj)
             
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            p = stage.core.Presentation(obj.totalStimulusTime * 1e-3);
+            p = stage.core.Presentation(6);
 
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity);
@@ -171,11 +171,11 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
 
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages*obj.totalRuns;
+            tf = obj.numEpochsPrepared < length(obj.sequence);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages*obj.totalRuns;
+            tf = obj.numEpochsCompleted < length(obj.sequence);
         end
     end
 end

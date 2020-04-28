@@ -111,7 +111,7 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
 
             % Pull filter
             rfFilter = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.calculateFilter(obj,true);
-            
+   
             % Adjust for ON/OFF cells
             if strcmp(obj.cellClass,'ON')
                 rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast);

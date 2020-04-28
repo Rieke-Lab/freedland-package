@@ -9,8 +9,8 @@
 function [normFilter,f,f_um] = calculateFilter(obj,normalization)
 
     % Convert neuron's RF to DOVES VH units.
-    centerSigmaPix = retinalMetamers.utils.changeUnits(obj.rfSigmaCenter,obj.micronsPerPixel,'UM2VH');
-    surroundSigmaPix = retinalMetamers.utils.changeUnits(obj.rfSigmaSurround,obj.micronsPerPixel,'UM2VH');
+    centerSigmaPix = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.rfSigmaCenter,obj.micronsPerPixel,'UM2VH');
+    surroundSigmaPix = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.rfSigmaSurround,obj.micronsPerPixel,'UM2VH');
 
     % Generate 2D gaussians
     centerGaus = fspecial('gaussian',[obj.videoSize(1) obj.videoSize(2)],centerSigmaPix);
@@ -67,7 +67,7 @@ function [normFilter,f,f_um] = calculateFilter(obj,normalization)
     % Convert to microns (from pixels)
     f_um = f;
     for a = 1:6
-        f_um{a,2} = retinalMetamers.utils.changeUnits(f_um{a,2},obj.micronsPerPixel,'VH2UM');
+        f_um{a,2} = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(f_um{a,2},obj.micronsPerPixel,'VH2UM');
     end
     f_um{5,2}(1,:) = f{5,2}(1,:); % Percentages do not change
     f_um{6,2}(1,:) = f{6,2}(1,:);

@@ -76,10 +76,6 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 error('A vector can only be present for the center, annulus, or near-surround radius. Not multiple.')
             end
             
-            if obj.subunitSlices == true && obj.rig.getDevice('Stage').getConfigurationSetting('prerender') == 0
-                error('Must have prerender set') 
-            end
-            
             % Find true radius and ignore regions
             obj.radii = [centerDiskRadii_PIX(1),annulusDiskRadii_PIX(1),nearSurroundDiskRadii_PIX(1),farSurroundDiskRadii_PIX(1)];
             obj.radii(obj.radii == 0) = [];
@@ -171,9 +167,18 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 
                 obj.disks = cutDisks;
             end
+            
+            % Combine disks with same animation (big time saver)
+            combinedDisks = zeros(size(obj.disks,1),size(obj.disks,2),2);
+            for a = 1:2:size(obj.disks,3)
+                combinedDisks(:,:,1) = combinedDisks(:,:,1) + obj.disks(:,:,a);
+            end
+            for a = 2:2:size(obj.disks,3)
+                combinedDisks(:,:,2) = combinedDisks(:,:,2) + obj.disks(:,:,a);
+            end
 
             % Add contrast reversing gratings
-            for a = 1:size(obj.disks,3)
+            for a = 1:size(combinedDisks,3)
                 grate = stage.builtin.stimuli.Grating('square'); % Square wave grating
                 grate.size = fliplr(obj.monitorSize);
                 grate.position = fliplr(obj.monitorSize)/2;
@@ -181,7 +186,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 grate.color = 2*obj.backgroundIntensity; % Amplitude of square wave
                 grate.contrast = obj.contrast; % Multiplier on square wave
                 
-                grateShape = uint8(obj.disks(:,:,a)*255);
+                grateShape = uint8(combinedDisks(:,:,a)*255);
                 grateMask = stage.core.Mask(grateShape);
                 grate.setMask(grateMask);
             

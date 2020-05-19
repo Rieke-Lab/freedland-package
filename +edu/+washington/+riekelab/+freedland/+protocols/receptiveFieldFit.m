@@ -6,11 +6,11 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
         stimTime = 250 % ms
         tailTime = 250 % ms
         cellClass = 'ON' % type of cell
-        centerSigma = [10,20,30,40,50,60,70,80,90,100] % in um
-        annulusSize = [30,40,50,60,70,80,90,100] % in um
+        centerSigma = [10,20,30,40,50,60,70,80,90,100,110,120] % in um
+        annulusSize = [30,40,50,60,70,80,90,100,110,120,130,140,150] % in um
         backgroundIntensity = 0.168; % maximum light intensity we encounter (0-1)
         contrast = 0.9; % 0-1 for spot brightness
-        randomizeOrder = true
+        randomizeOrder = false
         onlineAnalysis = 'none'
         numberOfAverages = uint16(2) % number of epochs to queue
         amp % Output amplifier

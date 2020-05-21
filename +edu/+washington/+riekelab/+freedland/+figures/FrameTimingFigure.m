@@ -82,6 +82,7 @@ classdef FrameTimingFigure < symphonyui.core.FigureHandler
                 lineColor = 'r';
                 epoch.addParameter('badFrameTiming',1);
             else
+                epoch.addParameter('badFrameTiming',0);
                 lineColor = 'b';
             end
             

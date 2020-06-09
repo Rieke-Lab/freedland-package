@@ -64,7 +64,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             rawMovies = cell(size(D,1),1);
             testMovies = cell(size(D,1),1);
             for a = 1:length(D)
-                if sum(strfind(D(a).name,'raw')) > 0
+                if sum(strfind(D(a).name,'1A')) > 0 || sum(strfind(D(a).name,'2A')) > 0
                     rawMovies{a,1} = D(a).name;
                 elseif sum(strfind(D(a).name,'.mp4')) > 0
                     testMovies{a,1} = D(a).name;

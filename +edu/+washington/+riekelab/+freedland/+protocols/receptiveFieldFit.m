@@ -110,13 +110,13 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.videoSize = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.monitorSize,obj.micronsPerPixel,'PIX2VH');
 
             % Pull filter
-            rfFilter = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.calculateFilter(obj,true);
-   
-            % Adjust for ON/OFF cells
+            rfFilter = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.calculateFilter(obj,false);
+
+            % Scale excitatory/inhibitory regions accordingly.
             if strcmp(obj.cellClass,'ON')
-                rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast);
+                rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast) + obj.backgroundIntensity;
             elseif strcmp(obj.cellClass,'OFF')
-                rfFilter = (1 - rfFilter) .* (obj.backgroundIntensity .* obj.contrast) + ((1-obj.contrast) .* obj.backgroundIntensity);
+                rfFilter = rfFilter .* (obj.backgroundIntensity .* -obj.contrast) + obj.backgroundIntensity;
             end
             
             % Scale to maximum light intensity

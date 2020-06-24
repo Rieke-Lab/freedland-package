@@ -114,13 +114,19 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
 
             % Scale excitatory/inhibitory regions accordingly.
             if strcmp(obj.cellClass,'ON')
-                rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast) + obj.backgroundIntensity;
+                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* obj.contrast);
+                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* -obj.contrast);
+                
+%                 rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast) + obj.backgroundIntensity;
             elseif strcmp(obj.cellClass,'OFF')
-                rfFilter = rfFilter .* (obj.backgroundIntensity .* -obj.contrast) + obj.backgroundIntensity;
+                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* -obj.contrast);
+                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* obj.contrast);
+                
+%                 rfFilter = rfFilter .* (obj.backgroundIntensity .* -obj.contrast) + obj.backgroundIntensity;
             end
             
             % Scale to maximum light intensity
-            obj.imageMatrix = uint8(rfFilter .* 255);
+            obj.imageMatrix = uint8((center+surround) .* 255);
             
             % Display in symphony
             scene = stage.builtin.stimuli.Image(obj.imageMatrix);

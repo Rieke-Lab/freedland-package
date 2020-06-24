@@ -9,7 +9,8 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
         centerSigma = [10,20,30,40,50,60,70,80,90,100,110,120] % in um
         annulusSize = [30,40,50,60,70,80,90,100,110,120,130,140,150] % in um
         backgroundIntensity = 0.168; % maximum light intensity we encounter (0-1)
-        contrast = 0.9; % 0-1 for spot brightness
+        centerContrast = 0.9; % 0-1 for spot brightness
+        surroundContrast = 0.9; % 0-1 for spot brightness
         randomizeOrder = false
         onlineAnalysis = 'none'
         numberOfAverages = uint16(2) % number of epochs to queue
@@ -114,15 +115,11 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
 
             % Scale excitatory/inhibitory regions accordingly.
             if strcmp(obj.cellClass,'ON')
-                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* obj.contrast);
-                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* -obj.contrast);
-                
-%                 rfFilter = rfFilter .* (obj.backgroundIntensity .* obj.contrast) + obj.backgroundIntensity;
+                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* obj.centerContrast);
+                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* -obj.surroundContrast);
             elseif strcmp(obj.cellClass,'OFF')
-                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* -obj.contrast);
-                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* obj.contrast);
-                
-%                 rfFilter = rfFilter .* (obj.backgroundIntensity .* -obj.contrast) + obj.backgroundIntensity;
+                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* -obj.centerContrast);
+                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* obj.surroundContrast);
             end
             
             % Scale to maximum light intensity

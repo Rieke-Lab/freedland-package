@@ -115,11 +115,11 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
 
             % Scale excitatory/inhibitory regions accordingly.
             if strcmp(obj.cellClass,'ON')
-                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* obj.centerContrast);
-                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* -obj.surroundContrast);
+                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* (1+obj.centerContrast));
+                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* (1-obj.surroundContrast));
             elseif strcmp(obj.cellClass,'OFF')
-                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* -obj.centerContrast);
-                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* obj.surroundContrast);
+                center = double(rfFilter > 0) .* (obj.backgroundIntensity .* (1-obj.centerContrast));
+                surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* (1+obj.surroundContrast));
             end
             
             % Scale to maximum light intensity

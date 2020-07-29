@@ -13,7 +13,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         nearSurroundDiskRadii = [80 100]; % in um. Set to 0 to ignore.
         contrast = 0.9 % relative to mean (0-1)
         temporalFrequency = 4 % Hz
-        subunitSlices = false; % slices each disk into 4 quadrants
+        subunitSlices = 4; % slices each radial disk into X quadrants
         
         % Additional options
         randomize = false;
@@ -127,7 +127,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             end
             
             % Add cuts as neccessary
-            if obj.subunitSlices == true
+            if obj.subunitSlices > 1
                 
                 % Define theta space
                 th = atan((xx - obj.monitorSize(2)/2) ./ (yy - obj.monitorSize(1)/2));
@@ -137,19 +137,19 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 th = rad2deg(th);
 
                 % Region for split field
-                overmask = zeros(size(obj.disks,1),size(obj.disks,2),4);
-                actualRotation = 90 - obj.rotation;
+                sliceAngles = unique(mod((0:360/obj.subunitSlices:360) - obj.rotation,360));
                 
-                for a = 1:3
-                    overmask(:,:,a) = th >= actualRotation+90*(a-1) & th < actualRotation+90*(a);
+                overmask = zeros(size(obj.disks,1),size(obj.disks,2),obj.subunitSlices);
+                for a = 1:obj.subunitSlices-1
+                    overmask(:,:,a) = th >= sliceAngles(a) & th < sliceAngles(a+1);
                 end
-                overmask(:,:,4) = abs(1 - sum(overmask,3)); % Ignores mod360 annoyances
+                overmask(:,:,end) = abs(1 - sum(overmask,3)); % Ignores mod360 annoyances
 
-                % Split masks and arrange to be contrast-reversing
+                % Split masks
                 cutDisks = zeros(size(obj.disks,1),size(obj.disks,2),size(overmask,3)*size(obj.disks,3));
                 order = 1:size(obj.disks,3);
                 counter2 = 1;
-                for a = [1 3]
+                for a = 1:2:obj.subunitSlices
                     for b = order
                         cutDisks(:,:,counter2) = obj.disks(:,:,b) .* overmask(:,:,a);
                         counter2 = counter2 + 1;
@@ -158,7 +158,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 
                 % Switch order so regions are distinct
                 altOrder = [order(2:end) order(1)];
-                for a = [2 4]
+                for a = 2:2:obj.subunitSlices
                     for b = altOrder
                         cutDisks(:,:,counter2) = obj.disks(:,:,b) .* overmask(:,:,a);
                         counter2 = counter2 + 1;

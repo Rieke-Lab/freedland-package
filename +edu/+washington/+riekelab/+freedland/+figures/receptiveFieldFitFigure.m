@@ -48,7 +48,7 @@ classdef receptiveFieldFitFigure < symphonyui.core.FigureHandler
                 'XTickMode', 'auto');
             xlabel(obj.axesHandle, obj.type);
             ylabel(obj.axesHandle, 'total spikes');
-            title(obj.axesHandle,'RF filter fit (seek minimum)');
+            title(obj.axesHandle,'rf filter fit (onset - offset)');
             
         end
 
@@ -70,12 +70,11 @@ classdef receptiveFieldFitFigure < symphonyui.core.FigureHandler
             stimPts = sampleRate*obj.stimTime/1000;
             preScaleFactor = stimPts / prePts;
             
-            epochResponseTrace = epochResponseTrace(1:prePts+stimPts);
-            
             %count spikes
             S = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(epochResponseTrace);
-            newEpochResponse = sum(S.sp > prePts); %spike count during stim
-            newBaseline = preScaleFactor * sum(S.sp < prePts); %spike count before stim, scaled by length
+            newEpochResponse = sum(S.sp > prePts & S.sp <= prePts + stimPts) -... % spike count during onset
+                sum(S.sp >= prePts + stimPts);                                    % spike count during offset
+            newBaseline = preScaleFactor * sum(S.sp <= prePts); % spike count before stim, scaled by length
          
             obj.allSpotSizes = cat(1,obj.allSpotSizes,currentSpotSize);
             obj.allEpochResponses = cat(1,obj.allEpochResponses,newEpochResponse);

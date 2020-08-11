@@ -18,7 +18,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         % Additional options
         randomize = false;
         backgroundIntensity = 0.168 % (0-1)
-        rotation = 0; % 0 to 90
+        rotation = [0 45]; % 0 to 90
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(1) % number of epochs to queue
         amp % Output amplifier
@@ -32,11 +32,12 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
         monitorSize
         analysisFigure
         disks
-        counter
         radii
-        radiiIndex
-        correctDim
+        counter
         sequence
+        holdData
+        specificRotation
+        dimTracker
     end
 
     methods
@@ -63,45 +64,37 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             obj.monitorSize = obj.rig.getDevice('Stage').getCanvasSize();
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
 
-            % Identify disk radii
+            % Convert to pixels
             centerDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.centerDiskRadii,obj.micronsPerPixel,'UM2PIX'));
             annulusDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.annulusDiskRadii,obj.micronsPerPixel,'UM2PIX'));
             nearSurroundDiskRadii_PIX = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.nearSurroundDiskRadii,obj.micronsPerPixel,'UM2PIX'));
             farSurroundDiskRadii_PIX = round(max(obj.monitorSize)/2);
             
-            % We can only search along one dimension at a time.
+            % Ensure we have only one vector present
             errorCheck = [length(centerDiskRadii_PIX),length(annulusDiskRadii_PIX),...
-                length(nearSurroundDiskRadii_PIX),length(farSurroundDiskRadii_PIX)];
+                    length(nearSurroundDiskRadii_PIX),length(obj.rotation)];
             if sum(errorCheck > 1) > 1
-                error('A vector can only be present for the center, annulus, or near-surround radius. Not multiple.')
+                error('Please only set one value to be a vector.')
+            else
+                totalReps = double(max(errorCheck) .* obj.numberOfAverages);
             end
             
-            % Find true radius and ignore regions
-            obj.radii = [centerDiskRadii_PIX(1),annulusDiskRadii_PIX(1),nearSurroundDiskRadii_PIX(1),farSurroundDiskRadii_PIX(1)];
-            obj.radii(obj.radii == 0) = [];
-            obj.radii = [0, obj.radii];
+            % Collect data
+            obj.holdData = [{centerDiskRadii_PIX},{annulusDiskRadii_PIX},...
+                    {nearSurroundDiskRadii_PIX},{farSurroundDiskRadii_PIX},{obj.rotation}];    
             
-            % For sequences to iteratively test
-            obj.radiiIndex = find(errorCheck > 1);
-            
-            if isempty(obj.radiiIndex)
-                obj.radiiIndex = 1;
+            obj.dimTracker = 1;
+            for a = 1:length(obj.holdData)
+                if length(obj.holdData{1,a}) == 1
+                    obj.holdData{1,a} = repelem(obj.holdData{1,a},totalReps);
+                else
+                    obj.dimTracker = a;
+                    obj.holdData{1,a} = repelem(obj.holdData{1,a},obj.numberOfAverages);
+                end
             end
-
-            % Identify correct value to change
-            obj.sequence = 1:errorCheck(obj.radiiIndex);
-            if obj.radiiIndex <= 1
-                obj.correctDim = centerDiskRadii_PIX;
-            elseif obj.radiiIndex == 2
-                obj.correctDim = annulusDiskRadii_PIX;
-            elseif obj.radiiIndex == 3
-                obj.correctDim = nearSurroundDiskRadii_PIX;
-            end
-            obj.radiiIndex = obj.radiiIndex + 1;
             
             % Account for repeats
-            obj.sequence = repmat(obj.sequence,1,obj.numberOfAverages);
-
+            obj.sequence = 1:totalReps;
             if obj.randomize == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
@@ -113,10 +106,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             
-            % Get next iteration
-            specificRadii = obj.correctDim(obj.sequence(obj.counter));
-            obj.radii(obj.radiiIndex) = specificRadii;
-            obj.counter = obj.counter + 1;
+            grabRadii(obj)
             
             % Make disks
             [xx,yy] = meshgrid(1:obj.monitorSize(2),1:obj.monitorSize(1));
@@ -137,7 +127,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
                 th = rad2deg(th);
 
                 % Region for split field
-                sliceAngles = unique(mod((0:360/obj.subunitSlices:360) - obj.rotation,360));
+                sliceAngles = unique(mod((0:360/obj.subunitSlices:360) - obj.specificRotation,360));
                 
                 overmask = zeros(size(obj.disks,1),size(obj.disks,2),obj.subunitSlices);
                 for a = 1:obj.subunitSlices-1
@@ -212,6 +202,7 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             function c = getGrateContrast(obj, time)
                 c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * time);
             end
+            obj.counter = obj.counter + 1;
         end
         
         function prepareEpoch(obj, epoch)
@@ -222,13 +213,20 @@ classdef contrastDiskSizing < edu.washington.riekelab.protocols.RiekeLabStagePro
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             
-            specificRadii = obj.radii;
-            changedVal = obj.correctDim(obj.sequence(obj.counter));
-            specificRadii(obj.radiiIndex) = changedVal;
-
-            epoch.addParameter('radii_pixels', specificRadii);
-            epoch.addParameter('radii_um', round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(specificRadii,obj.micronsPerPixel,'PIX2UM')));
-            epoch.addParameter('radii_dimension', obj.radiiIndex);
+            grabRadii(obj);
+            epoch.addParameter('specificRotation', obj.specificRotation);
+            epoch.addParameter('radii_pixels', obj.radii);
+            epoch.addParameter('radii_um', round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.radii,obj.micronsPerPixel,'PIX2UM')));
+            epoch.addParameter('tracker',obj.dimTracker);
+        end
+        
+        function grabRadii(obj)
+            obj.radii = zeros(1,4);
+            for a = 1:4
+                obj.radii(a) = obj.holdData{1,a}(obj.counter);
+            end
+            obj.radii = unique([0 obj.radii]);
+            obj.specificRotation = obj.holdData{1,5}(obj.counter);
         end
         
         function tf = shouldContinuePreparingEpochs(obj)

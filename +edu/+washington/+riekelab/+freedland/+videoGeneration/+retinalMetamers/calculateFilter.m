@@ -13,8 +13,8 @@ function [normFilter,f,f_um] = calculateFilter(obj,normalization)
     surroundSigmaPix = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.rfSigmaSurround,obj.micronsPerPixel,'UM2VH');
 
     % Generate 2D gaussians
-    centerGaus = fspecial('gaussian',[obj.videoSize(1) obj.videoSize(2)],centerSigmaPix);
-    surroundGaus = fspecial('gaussian',[obj.videoSize(1) obj.videoSize(2)],surroundSigmaPix);
+    centerGaus = fspecial('gaussian',round([obj.videoSize(1) obj.videoSize(2)]),centerSigmaPix);
+    surroundGaus = fspecial('gaussian',round([obj.videoSize(1) obj.videoSize(2)]),surroundSigmaPix);
 
     % Calculate difference of gaussians
     diffGaussian = centerGaus - surroundGaus;

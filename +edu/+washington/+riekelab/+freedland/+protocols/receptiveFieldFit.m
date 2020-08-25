@@ -9,8 +9,9 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
         centerSigma = [10,20,30,40,50,60,70,80,90,100,110,120] % in um
         annulusSize = [30,40,50,60,70,80,90,100,110,120,130,140,150] % in um
         backgroundIntensity = 0.168; % maximum light intensity we encounter (0-1)
-        centerContrast = 0.9; % 0-1 for spot brightness
-        surroundContrast = 0.9; % 0-1 for spot brightness
+        centerContrast = 0.5; % 0-1 for spot brightness
+        surroundContrast = 0.5; % 0-1 for spot brightness
+        disk = 'uniform';
         randomizeOrder = false
         onlineAnalysis = 'none'
         numberOfAverages = uint16(2) % number of epochs to queue
@@ -20,7 +21,8 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})   
-        cellClassType = symphonyui.core.PropertyType('char', 'row', {'ON', 'OFF'})        
+        cellClassType = symphonyui.core.PropertyType('char', 'row', {'ON', 'OFF'})   
+        diskType = symphonyui.core.PropertyType('char', 'row', {'uniform', 'spatial'})   
         centerSigmaSequence
         annulusSizeSequence
         centerSigmaSelectionIndex
@@ -117,9 +119,27 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             if strcmp(obj.cellClass,'ON')
                 center = double(rfFilter > 0) .* (obj.backgroundIntensity .* (1+obj.centerContrast));
                 surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* (1-obj.surroundContrast));
+                
+                % center = sum(center * RF) / sum(RF)
+                if strcmp(obj.disk,'spatial')
+                    center = obj.backgroundIntensity .* (1+obj.centerContrast) ./ rfFilter;
+                    surround = obj.backgroundIntensity .* (1-obj.surroundContrast) ./ rfFilter;
+                    center(center > 1 | center < 0) = 0;
+                    surround(surround > 0 | surround < -1) = 0;
+                    surround = abs(surround);
+                end
             elseif strcmp(obj.cellClass,'OFF')
                 center = double(rfFilter > 0) .* (obj.backgroundIntensity .* (1-obj.centerContrast));
                 surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* (1+obj.surroundContrast));
+                
+                % center = sum(center * RF) / sum(RF)
+                if strcmp(obj.disk,'spatial')
+                    center = obj.backgroundIntensity .* (1-obj.centerContrast) ./ rfFilter;
+                    surround = obj.backgroundIntensity .* (1+obj.surroundContrast) ./ rfFilter;
+                    center(center > 1 | center < 0) = 0;
+                    surround(surround > 0 | surround < -1) = 0;
+                    surround = abs(surround);
+                end
             end
             
             % Scale to maximum light intensity

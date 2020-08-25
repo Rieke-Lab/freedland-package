@@ -128,6 +128,15 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
                     surround(surround > 0 | surround < -1) = 0;
                     surround = abs(surround);
                 end
+                
+                if obj.surroundContrast == 0
+                    surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* (1-obj.surroundContrast));
+                end
+                
+                if obj.centerContrast == 0
+                    center = double(rfFilter > 0) .* (obj.backgroundIntensity .* (1+obj.centerContrast));
+                end
+                
             elseif strcmp(obj.cellClass,'OFF')
                 center = double(rfFilter > 0) .* (obj.backgroundIntensity .* (1-obj.centerContrast));
                 surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* (1+obj.surroundContrast));
@@ -139,6 +148,14 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
                     center(center > 1 | center < 0) = 0;
                     surround(surround > 0 | surround < -1) = 0;
                     surround = abs(surround);
+                end
+                
+                if obj.surroundContrast == 0
+                    surround = double(rfFilter <= 0) .* (obj.backgroundIntensity .* (1+obj.surroundContrast));
+                end
+                
+                if obj.centerContrast == 0
+                    center = double(rfFilter > 0) .* (obj.backgroundIntensity .* (1-obj.centerContrast));
                 end
             end
             

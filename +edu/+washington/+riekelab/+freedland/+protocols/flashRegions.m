@@ -1,36 +1,33 @@
-% Flash rotated naturalistic images.
+% Flash regions in low-dimensional space to find correlations.
 % By J. Freedland, 2019.
-classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
-        preTime = 250 % in ms
+        preTime  = 250 % in ms
         stimTime = 250 % in ms
         tailTime = 250 % in ms
         
-        % Natural image
-        imageNo = 81; % natural image number (1 to 101), as a vector.
-        observerNo = 1; % observer number (1 to 19). Can be a single value or vector.
-        frame = 200; % frame # according to DOVES database. Typically between 1 and 1000.
+        % Image information
+        centerRadius = 100;  % in um
+        centerCuts   = 8;    % number of slices to divide center into
+        rotate       = 0;    % degrees to rotate slices
+        randomize    = true; % randomize order to present slices
         
-        % Rotation characteristics
-        stepRotation = 30; % degrees to rotate each cycle
-        maskRadius = 300; % in um. Places mask over surrounding portion of image.
-        randomize = false; % randomize each rotation
-
+        % Brightness
+        diskIntensity = 0.3;         % 0 to 1
+        backgroundIntensity = 0.168; % 0 to 1
+        
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(5) % number of epochs to queue
+        numberOfAverages = uint16(3) % number of epochs to queue
         amp % Output amplifier
     end
     
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        backgroundIntensity
-        imageDatabase
-        counter
-        order
-        rotations
+        disks
+        selections
     end
 
     methods
@@ -49,21 +46,54 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis); 
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
-            obj.showFigure('edu.washington.riekelab.freedland.figures.receptiveFieldFitFigure',...
-                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','rotation (deg)');
             
-            % Use DOVES database to identify images along trajectory
-            [imageFrame, obj.backgroundIntensities] = findImage(obj);
-            obj.imageDatabase = uint8(imageFrame);
+            % Convert units
+            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
+            centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
+                obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2PIX');
             
-            % Identify rotations
-            obj.rotations = unique(mod(0:obj.stepRotation:360,360));
+            %%% Create pixel space
+            [xx,yy] = meshgrid(1:canvasSize(2),1:canvasSize(1));
+            r = sqrt((xx - canvasSize(2)/2).^2 + (yy - canvasSize(1)/2).^2); 
+            th = atan((xx - canvasSize(2)/2) ./ (yy - canvasSize(1)/2));
+            th = abs(th-pi/2);              
+    
+            % Adjust theta space for strange monitors
+            nonsmooth = find(diff(th) > pi/2,1);
+            th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
+            th = rad2deg(th);
+            th = mod(th + obj.rotate,360); % Rotate as required
+            %%%
+
+            % Build masks
+            rotations = 0:360/obj.centerCuts:360;
+            obj.disks = zeros(size(r,1),size(r,2),obj.centerCuts);
+            totalCombinations = 0;
+            for a = 1:obj.centerCuts
+                obj.disks(:,:,a) = (r <= centerRadiusPix) .* (th >= rotations(a) & th < rotations(a+1)) .* obj.diskIntensity;
+                totalCombinations = totalCombinations + nchoosek(obj.centerCuts,a);
+            end
+            
+            disp(strcat('total disk combinations: ',mat2str(totalCombinations)));
+            totalTime = totalCombinations*obj.numberOfAverages .* (obj.preTime + obj.stimTime + obj.tailTime)*1.33/1000;
+            disp(strcat('approx stimulus time (+33% rig delay):',mat2str(round(totalTime/60,2)),' minutes'));
+            
+            % Define all possible region combinations
+            obj.selections = zeros(totalCombinations,obj.centerCuts);
+            counter1 = 1;
+            for a = 1:obj.centerCuts
+                A = nchoosek(1:obj.centerCuts,a);
+                for b = 1:size(A,1)
+                    obj.selections(counter1,A(b,:)) = 1;
+                    counter1 = counter1+1;
+                end
+            end
             
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(length(obj.rotations));
+                obj.order = randperm(length(totalCombinations));
             else
-                obj.order = 1:length(obj.rotations);
+                obj.order = 1:length(totalCombinations);
             end
         end
         
@@ -76,7 +106,7 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
-            epoch.addParameter('rotation',obj.rotations(obj.order(obj.counter+1)));
+            epoch.addParameter('masksPresent',obj.selections(obj.order(obj.counter+1),:));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -90,16 +120,15 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Stage presets
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();     
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
-            
-            % Rotate image
-            specificImage = imrotate(obj.imageDatabase,obj.rotations(obj.order(obj.counter+1)));
+
+            % Set image
             p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
+            specificDisks = logical(obj.selections(obj.order(obj.counter+1),:));
+            image = sum(obj.disks(:,:,specificDisks),3);
             
             % Prep to display image
-            scene = stage.builtin.stimuli.Image(specificImage);
-            sz = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                size(specificImage,1),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'VH2PIX');
-            scene.size = [sz sz];
+            scene = stage.builtin.stimuli.Image(uint8(image.*255));
+            scene.size = [canvasSize(2) canvasSize(1)];
             p0 = canvasSize/2;
             scene.position = p0;
             
@@ -113,41 +142,7 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
             
-            % Add mask
-            aperatureDiameter = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                obj.maskRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2PIX') .* 2);
-            
-            if (aperatureDiameter > 0) %% Create aperture
-                aperture = stage.builtin.stimuli.Rectangle();
-                aperture.position = canvasSize/2;
-                aperture.color = obj.backgroundIntensity;
-                aperture.size = [max(canvasSize) max(canvasSize)];
-                mask = stage.core.Mask.createCircularAperture(aperatureDiameter/max(canvasSize), 1024); %circular aperture
-                aperture.setMask(mask);
-                p.addStimulus(aperture); %add aperture
-            end
-            
             obj.counter = mod(obj.counter + 1,length(obj.order));
-        end
-        
-        function imageFrame = findImage(obj)
-            
-            % Relevant frame size
-            pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.maskRadius,...
-                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2VH'));
-
-            [empiricalPath, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(...
-                obj.imageNo,obj.observerNo);
-                
-            % Scale pixels in image to monitor
-            img = pictureInformation.image;
-            img = (img./max(max(img)));  
-            obj.backgroundIntensity = mean(img(:));
-            img = img.*255;      
-                
-            % Pull image
-            imageFrame = img(empiricalPath.y(obj.frame)-pixelRange:empiricalPath.y(obj.frame)+pixelRange,...
-                empiricalPath.x(obj.frame)-pixelRange:empiricalPath.x(obj.frame)+pixelRange);
         end
         
         function tf = shouldContinuePreparingEpochs(obj)

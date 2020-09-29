@@ -62,8 +62,10 @@ classdef receptiveFieldFitFigure < symphonyui.core.FigureHandler
 
             if strfind(obj.type,'center') > 0
                 currentSpotSize = epoch.parameters('rfSigmaCenter');
-            else
+            elseif strfind(obj.type,'surround')
                 currentSpotSize = epoch.parameters('rfSigmaSurround');
+            elseif strfind(obj.type,'rotation')
+                currentSpotSize = epoch.parameters('rotation');
             end
             
             prePts = sampleRate*obj.preTime/1000;

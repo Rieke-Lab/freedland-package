@@ -14,12 +14,12 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Rotation characteristics
         stepRotation = 30; % degrees to rotate each cycle
-        maskRadius = 300; % in um. Places mask over surrounding portion of image.
-        randomize = false; % randomize each rotation
+        maskRadius = 100;  % in um. Places mask over surrounding portion of image.
+        randomize = true;  % randomize each rotation
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(5) % number of epochs to queue
+        numberOfAverages = uint16(3) % number of epochs to queue
         amp % Output amplifier
     end
     
@@ -53,7 +53,7 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','rotation (deg)');
             
             % Use DOVES database to identify images along trajectory
-            [imageFrame, obj.backgroundIntensities] = findImage(obj);
+            imageFrame = findImage(obj);
             obj.imageDatabase = uint8(imageFrame);
             
             % Identify rotations
@@ -151,11 +151,11 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.imageNo);
+            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.order);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.imageNo);
+            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.order);
         end
     end
 end

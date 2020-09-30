@@ -14,7 +14,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         randomize    = true; % randomize order to present slices
         
         % Brightness
-        diskIntensity = 0.3;         % 0 to 1
+        diskIntensity = 0.319;       % 0 to 1
         backgroundIntensity = 0.168; % 0 to 1
         
         % Additional parameters
@@ -28,6 +28,8 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         disks
         selections
+        order
+        counter
     end
 
     methods
@@ -73,11 +75,11 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.disks(:,:,a) = (r <= centerRadiusPix) .* (th >= rotations(a) & th < rotations(a+1)) .* obj.diskIntensity;
                 totalCombinations = totalCombinations + nchoosek(obj.centerCuts,a);
             end
-            
+
             disp(strcat('total disk combinations: ',mat2str(totalCombinations)));
-            totalTime = totalCombinations*obj.numberOfAverages .* (obj.preTime + obj.stimTime + obj.tailTime)*1.33/1000;
-            disp(strcat('approx stimulus time (+33% rig delay):',mat2str(round(totalTime/60,2)),' minutes'));
-            
+            totalTime = (totalCombinations * obj.numberOfAverages) * ((obj.preTime + obj.stimTime + obj.tailTime)*1.33/1000);
+            disp(strcat('approx stimulus time (+33% rig delay):',mat2str(round(totalTime/60)),' minutes'));
+
             % Define all possible region combinations
             obj.selections = zeros(totalCombinations,obj.centerCuts);
             counter1 = 1;
@@ -88,12 +90,12 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     counter1 = counter1+1;
                 end
             end
-            
+
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(length(totalCombinations));
+                obj.order = randperm(totalCombinations);
             else
-                obj.order = 1:length(totalCombinations);
+                obj.order = 1:totalCombinations;
             end
         end
         
@@ -106,7 +108,10 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
-            epoch.addParameter('masksPresent',obj.selections(obj.order(obj.counter+1),:));
+            
+            % Flip for disks to correspond from 0 deg --> 360 deg
+            % (counterclockwise from 3 o'clock)
+            epoch.addParameter('flashedRegions',fliplr(obj.selections(obj.order(obj.counter+1),:)));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -125,6 +130,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
             specificDisks = logical(obj.selections(obj.order(obj.counter+1),:));
             image = sum(obj.disks(:,:,specificDisks),3);
+            image(image == 0) = obj.backgroundIntensity;
             
             % Prep to display image
             scene = stage.builtin.stimuli.Image(uint8(image.*255));
@@ -146,11 +152,11 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.imageNo);
+            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.order);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.imageNo);
+            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.order);
         end
     end
 end

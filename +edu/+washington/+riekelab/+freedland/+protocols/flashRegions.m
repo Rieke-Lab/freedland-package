@@ -16,6 +16,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         % Brightness
         diskIntensity = 0.319;       % 0 to 1
         backgroundIntensity = 0.168; % 0 to 1
+        addNegativeIntensity = true; % Add trials with opposite-contrast adjacent disks
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -72,13 +73,9 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.disks = zeros(size(r,1),size(r,2),obj.centerCuts);
             totalCombinations = 0;
             for a = 1:obj.centerCuts
-                obj.disks(:,:,a) = (r <= centerRadiusPix) .* (th >= rotations(a) & th < rotations(a+1)) .* obj.diskIntensity;
+                obj.disks(:,:,a) = (r <= centerRadiusPix) .* (th >= rotations(a) & th < rotations(a+1));
                 totalCombinations = totalCombinations + nchoosek(obj.centerCuts,a);
             end
-
-            disp(strcat('total disk combinations: ',mat2str(totalCombinations)));
-            totalTime = (totalCombinations * obj.numberOfAverages) * ((obj.preTime + obj.stimTime + obj.tailTime)*1.33/1000);
-            disp(strcat('approx stimulus time (+33% rig delay):',mat2str(round(totalTime/60)),' minutes'));
 
             % Define all possible region combinations
             obj.selections = zeros(totalCombinations,obj.centerCuts);
@@ -90,12 +87,39 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     counter1 = counter1+1;
                 end
             end
+            
+            % Add opposing disk conditions
+            if obj.addNegativeIntensity == true
+                counter1 = 1;
+                negativeIntensity = zeros(totalCombinations,obj.centerCuts);
+                for a = 2 % DIMENSIONAL SPACE TO INCLUDE NEGATIVE DISKS IN
+                    A = nchoosek(1:obj.centerCuts,a);
+                    for b = 1:size(A,1) % Specific combination of disks
+                        B = A(b,:);
+                        for c = 1:a-1 % Find every possible combination of negative disks
+                            C = nchoosek(1:a,c);
+                            for d = 1:size(C,1)
+                                negativeIntensity(counter1,B) = 1;
+                                negativeIntensity(counter1,B(C(d,:))) = -1;
+                                counter1 = counter1+1;
+                            end
+                        end
+                    end
+                end
+                negativeIntensity(sum(abs(negativeIntensity),2) == 0,:) = [];
+                obj.selections = [obj.selections; negativeIntensity];
+                totalCombinations = size(obj.selections,1);
+            end
+            
+            disp(strcat('total disk combinations: ',mat2str(totalCombinations)));
+            totalTime = (totalCombinations * obj.numberOfAverages) * ((obj.preTime + obj.stimTime + obj.tailTime + 1500)/1000);
+            disp(strcat('approx stimulus time (+1.5 sec delay):',mat2str(round(totalTime/60)),' minutes'));
 
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(totalCombinations);
+                obj.order = randperm(size(obj.selections,1));
             else
-                obj.order = 1:totalCombinations;
+                obj.order = 1:size(obj.selections,1);
             end
         end
         
@@ -128,8 +152,20 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             % Set image
             p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
-            specificDisks = logical(obj.selections(obj.order(obj.counter+1),:));
-            image = sum(obj.disks(:,:,specificDisks),3);
+            positiveDisks = obj.selections(obj.order(obj.counter+1),:) == 1; % Already at intensity
+            posImage = sum(obj.disks(:,:,positiveDisks),3) .* obj.diskIntensity;
+            
+            negativeDisks = obj.selections(obj.order(obj.counter+1),:) == -1;
+            
+            contrast = abs(obj.backgroundIntensity - obj.diskIntensity);
+            if obj.diskIntensity > obj.backgroundIntensity % ON Cell
+                oppDiskIntensity = (obj.backgroundIntensity - contrast);
+            else
+                oppDiskIntensity = (obj.backgroundIntensity + contrast);
+            end
+            negImage = sum(obj.disks(:,:,negativeDisks),3) .* oppDiskIntensity;
+            
+            image = posImage + negImage;
             image(image == 0) = obj.backgroundIntensity;
             
             % Prep to display image

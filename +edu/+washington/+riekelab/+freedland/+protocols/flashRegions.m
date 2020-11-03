@@ -49,6 +49,8 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis); 
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+            obj.showFigure('edu.washington.riekelab.freedland.figures.flashRegionsFigure',...
+                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','regions');
             
             % Convert units
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
@@ -132,10 +134,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
-            
-            % Flip for disks to correspond from 0 deg --> 360 deg
-            % (counterclockwise from 3 o'clock)
-            epoch.addParameter('flashedRegions',fliplr(obj.selections(obj.order(obj.counter+1),:)));
+            epoch.addParameter('flashedRegions',obj.selections(obj.order(obj.counter+1),:));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));

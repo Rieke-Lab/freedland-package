@@ -18,6 +18,7 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
         allSpotSizes
         summaryData
         rawExport
+        allTrackingSpotSize
     end
     
     methods
@@ -61,31 +62,42 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
         
         function handleEpoch(obj, epoch)
             
-            %load amp data
+            % Load amp data
             response = epoch.getResponse(obj.ampDevice);
             epochResponseTrace = response.getData();
             sampleRate = response.sampleRate.quantityInBaseUnits;
-            currentSpotSize = epoch.parameters('flashedRegions');
+            currentSpotSize = sum(epoch.parameters('flashedRegions'));
+            trackingSpotSize = epoch.parameters('flashedRegions');
             
             prePts = sampleRate*obj.preTime/1000;
             stimPts = sampleRate*obj.stimTime/1000;
             preScaleFactor = stimPts / prePts;
             
-            %count spikes
+            % Count spikes
             S = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(epochResponseTrace);
             newEpochResponse = sum(S.sp > prePts & S.sp <= prePts + stimPts) -... % spike count during onset
                 sum(S.sp >= prePts + stimPts);                                    % spike count during offset
             newBaseline = preScaleFactor * sum(S.sp <= prePts); % spike count before stim, scaled by length
          
             obj.allSpotSizes = cat(1,obj.allSpotSizes,currentSpotSize);
+            obj.allTrackingSpotSize = cat(1,obj.allTrackingSpotSize,trackingSpotSize);
             obj.allEpochResponses = cat(1,obj.allEpochResponses,newEpochResponse);
             obj.baselines = cat(1,obj.baselines,newBaseline);
             
+            % For graphing
             obj.summaryData.spotSizes = unique(obj.allSpotSizes);
             obj.summaryData.meanResponses = zeros(size(obj.summaryData.spotSizes));
             for SpotSizeIndex = 1:length(obj.summaryData.spotSizes)
                 pullIndices = (obj.summaryData.spotSizes(SpotSizeIndex) == obj.allSpotSizes);
                 obj.summaryData.meanResponses(SpotSizeIndex) = mean(obj.allEpochResponses(pullIndices));
+            end
+            
+            % For calculations
+            obj.summaryData.trackingSpotSizes = unique(obj.allTrackingSpotSize,'rows');
+            obj.summaryData.trackingResponses = zeros(size(obj.summaryData.trackingSpotSizes));
+            for SpotSizeIndex = 1:size(obj.summaryData.trackingSpotSizes,1)
+                pullIndices = isequal(obj.summaryData.trackingSpotSizes(SpotSizeIndex,:),obj.allTrackingSpotSize);
+                obj.summaryData.trackingResponses(SpotSizeIndex) = mean(obj.allEpochResponses(pullIndices));
             end
             
             if isempty(obj.lineHandle)
@@ -98,8 +110,8 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
         end
         
         function onSelectedCalculateWeights(obj, ~, ~)
-            x = obj.summaryData.spotSizes;
-            B = obj.summaryData.meanResponses;
+            x = obj.summaryData.trackingSpotSizes;
+            B = obj.summaryData.trackingResponses;
             
             % Find 1D cases
             x1D = x(sum(x,2) == 1) .* y(sum(x,2) == 1);
@@ -114,7 +126,6 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
             % Export
             title(obj.axesHandle,num2str(w));
             dlmwrite(strcat(datestr((datetime('now','Format','yyyy-MM-dd HH-mm-ss'))),'.txt'),w)
-            
         end
         
     end

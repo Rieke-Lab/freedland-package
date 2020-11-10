@@ -7,13 +7,13 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         stimTime = 250 % in ms
         tailTime = 250 % in ms
         
+        % Region of image to be shown
+        maskRadius = 100;  % in um. Places mask over surrounding portion of image.
+        
         % Natural image
         imageNo = [5,5,12,12,71,71,73,73,79,79,81,81,100,100];              % natural image number (1 to 101)
-        observerNo = 1;                                                     % observer number (1 to 19).
         frame = [532,471,458,608,900,714,681,946,252,513,678,64,593,779];   % frame # according to DOVES database. (1 to ~1000).
-        
-        % Rotation characteristics
-        maskRadius = 100;  % in um. Places mask over surrounding portion of image.
+        observerNo = 1;                                                     % observer number (1 to 19).
         randomize = true;  % randomize each rotation
 
         % Additional parameters
@@ -60,7 +60,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Setup display
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(1:length(obj.imageNo));
+                obj.order = randperm(length(obj.imageNo));
             else
                 obj.order = 1:length(obj.imageNo);
             end

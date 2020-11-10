@@ -19,6 +19,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Brightness
         weights = [0.5 0.6 0.7 0.75 0.8 0.85 0.9 1]; % integration weight of each region (see: flashRegions)
+        contrast = 0.25; % 0 to 1
         backgroundIntensity = 0.168; % 0 to 1
         
         % Additional parameters
@@ -55,6 +56,13 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis); 
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+            obj.showFigure('edu.washington.riekelab.freedland.figures.receptiveFieldFitFigure',...
+                obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','experimentID');
+            
+            % Check
+            if length(obj.weights) ~= obj.centerCuts
+                error('nonequal number of weights and regions')
+            end
             
             % Convert units
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
@@ -101,6 +109,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('regionIntensity',(obj.intensities(obj.order(obj.counter+1),:)));
+            epoch.addParameter('experimentID',obj.order(obj.counter+1));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -146,7 +155,6 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         function intensity = prepIntensities(obj)
             
-            obj.contrast = 0.5;
             x = obj.weights';
             B = sum(obj.contrast*x);
             
@@ -158,7 +166,9 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             givens = obj.centerCuts - remainingValues;
             
             % Randomly generate contrasts
-            A = rand(round(obj.numberOfStimuli*2),givens); % ~61% of cases will be unusable. 
+            % ~61% of cases will be unusable at 50% contrast
+            % ~97% of cases will be unusable at 25%/75% contrast
+            A = rand(round(obj.numberOfStimuli*100),givens); % Enough for 1% usability
             
             % Solve for remaining contrasts
             A = [A B - A*x(1:givens) / x(givens+1:end)];
@@ -172,9 +182,9 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % round(A * x,2) == round(B,2);
             
             % Convert intensities to light intensities
-            if contains(obj.cellClass,'ON')
+            if strcmp(obj.cellClass,'ON')
                 intensity = (A+1) .* obj.backgroundIntensity;
-            elseif contains(obj.cellClass,'OFF')
+            elseif strcmp(obj.cellClass,'OFF')
                 intensity = (1-A) .* obj.backgroundIntensity;
             end
             

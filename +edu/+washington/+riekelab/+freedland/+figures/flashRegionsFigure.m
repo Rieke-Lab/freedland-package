@@ -23,7 +23,7 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
     
     methods
         
-        function obj = receptiveFieldFitFigure(ampDevice, varargin)
+        function obj = flashRegionsFigure(ampDevice, varargin)
             obj.ampDevice = ampDevice;            
             ip = inputParser();
             ip.addParameter('preTime', [], @(x)isvector(x));
@@ -94,9 +94,9 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
             
             % For calculations
             obj.summaryData.trackingSpotSizes = unique(obj.allTrackingSpotSize,'rows');
-            obj.summaryData.trackingResponses = zeros(size(obj.summaryData.trackingSpotSizes));
+            obj.summaryData.trackingResponses = zeros(size(obj.summaryData.trackingSpotSizes,1),1);
             for SpotSizeIndex = 1:size(obj.summaryData.trackingSpotSizes,1)
-                pullIndices = isequal(obj.summaryData.trackingSpotSizes(SpotSizeIndex,:),obj.allTrackingSpotSize);
+                [~,pullIndices] = ismember(obj.summaryData.trackingSpotSizes(SpotSizeIndex,:),obj.allTrackingSpotSize,'rows');
                 obj.summaryData.trackingResponses(SpotSizeIndex) = mean(obj.allEpochResponses(pullIndices));
             end
             
@@ -113,19 +113,17 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
             x = obj.summaryData.trackingSpotSizes;
             B = obj.summaryData.trackingResponses;
             
-            % Find 1D cases
-            x1D = x(sum(x,2) == 1) .* y(sum(x,2) == 1);
-            x1D = sum(x1D,1);
-            
-            % Put 1D spikes into every case
-            A = x .* x1D; 
+            % Find 1D cases, place as X
+            B1D = repmat(B(sum(x,2) == 1)',size(x,1),1);
+            A = x.*B1D;
             
             % A * w = B, where w is weights
             w = A\B;
-            
+
             % Export
             title(obj.axesHandle,num2str(w));
-            dlmwrite(strcat(datestr((datetime('now','Format','yyyy-MM-dd HH-mm-ss'))),'.txt'),w)
+            dlmwrite(strcat('Documents/weights.txt'),w')
+            disp(w)
         end
         
     end

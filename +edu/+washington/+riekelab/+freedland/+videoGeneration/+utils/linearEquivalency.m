@@ -8,55 +8,55 @@
 %           diskValues: light intensity of each disk
 %           masks: shape of each mask
 %%%
-function [newTraj, diskValues, masks] = linearEquivalency(obj, weightedTrajectory, RFFilter, unweightedTrajectory)   
+function [newTraj, diskValues, masks] = linearEquivalency(retinalMetamers, weightedTrajectory, RFFilter, unweightedTrajectory)   
 
     % Define space as polar coordinates (r = radial, th = theta)
-    [xx,yy] = meshgrid(1:obj.videoSize(2),1:obj.videoSize(1));
-    r = sqrt((xx - obj.videoSize(2)/2).^2 + (yy - obj.videoSize(1)/2).^2); 
-    th = atan((xx - obj.videoSize(2)/2) ./ (yy - obj.videoSize(1)/2));
+    [xx,yy] = meshgrid(1:retinalMetamers.videoSize(2),1:retinalMetamers.videoSize(1));
+    r = sqrt((xx - retinalMetamers.videoSize(2)/2).^2 + (yy - retinalMetamers.videoSize(1)/2).^2); 
+    th = atan((xx - retinalMetamers.videoSize(2)/2) ./ (yy - retinalMetamers.videoSize(1)/2));
     th = abs(th-pi/2);              
     
     % Adjust theta space for strange monitors
     nonsmooth = find(diff(th) > pi/2,1);
     th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
     th = rad2deg(th);
-    th = mod(th + obj.sliceRotation,360); % Rotate as required
+    th = mod(th + retinalMetamers.sliceRotation,360); % Rotate as required
     
     % Identify user-specific radii
-    if strcmp(obj.diskRegionUnits,'pix')
-        obj.radii = round(utils.changeUnits(obj.diskRegions,obj.micronsPerPixel,'pix2arcmin'));
-    elseif strcmp(obj.diskRegionUnits,'um')
-        obj.radii = round(utils.changeUnits(obj.diskRegions,obj.micronsPerPixel,'um2arcmin'));
-    elseif strcmp(obj.diskRegionUnits,'deg')
-        obj.radii = obj.radii / 60; % DOVES units are in arcmin
-    elseif strcmp(obj.diskRegionUnits,'arcmin')
-        obj.radii = obj.diskRegions;
+    if strcmp(retinalMetamers.diskRegionUnits,'pix')
+        retinalMetamers.radii = round(utils.changeUnits(retinalMetamers.diskRegions,retinalMetamers.micronsPerPixel,'pix2arcmin'));
+    elseif strcmp(retinalMetamers.diskRegionUnits,'um')
+        retinalMetamers.radii = round(utils.changeUnits(retinalMetamers.diskRegions,retinalMetamers.micronsPerPixel,'um2arcmin'));
+    elseif strcmp(retinalMetamers.diskRegionUnits,'deg')
+        retinalMetamers.radii = retinalMetamers.radii / 60; % DOVES units are in arcmin
+    elseif strcmp(retinalMetamers.diskRegionUnits,'arcmin')
+        retinalMetamers.radii = retinalMetamers.diskRegions;
     else
         error('Please identify correct diskRegionUnit: "pix", "um", "deg", or "arcmin"')
     end
     
-    obj.slices(obj.slices == 0) = 1;
-    obj.theta = 0:360/obj.slices:360;
+    retinalMetamers.slices(retinalMetamers.slices == 0) = 1;
+    retinalMetamers.theta = 0:360/retinalMetamers.slices:360;
     
     % Generate switchDisk values, used to measure impact of surround.
-    if sum(obj.switchDisks) > 0
-        obj.switchTraj = utils.generateSwitchDisks(obj);
+    if sum(retinalMetamers.switchDisks) > 0
+        retinalMetamers.switchTraj = utils.generateSwitchDisks(retinalMetamers);
     end
 
     newTraj = zeros(size(weightedTrajectory));
-    diskValues = zeros((length(obj.radii)-1).*(length(obj.theta)-1),size(weightedTrajectory,4));
-    masks = zeros(size(weightedTrajectory,1),size(weightedTrajectory,2),(length(obj.radii)-1).*(length(obj.theta)-1));
+    diskValues = zeros((length(retinalMetamers.radii)-1).*(length(retinalMetamers.theta)-1),size(weightedTrajectory,4));
+    masks = zeros(size(weightedTrajectory,1),size(weightedTrajectory,2),(length(retinalMetamers.radii)-1).*(length(retinalMetamers.theta)-1));
 
     % Calculate statistics
     counter = 1;
-    for a = 1:length(obj.radii) - 1
-        radiusFilt = r >= obj.radii(a) & r <= obj.radii(a+1); % Radial filter (r)
-        for b = 1:length(obj.theta) - 1
-            angFilt = th >= obj.theta(b) & th < obj.theta(b+1); % Angular filter (theta)
+    for a = 1:length(retinalMetamers.radii) - 1
+        radiusFilt = r >= retinalMetamers.radii(a) & r <= retinalMetamers.radii(a+1); % Radial filter (r)
+        for b = 1:length(retinalMetamers.theta) - 1
+            angFilt = th >= retinalMetamers.theta(b) & th < retinalMetamers.theta(b+1); % Angular filter (theta)
             ignoreDisk = false;
             
             % Whether to ignore angular filter
-            if ~ismember(a,obj.sliceDisks)
+            if ~ismember(a,retinalMetamers.sliceDisks)
                 angFilt = ones(size(angFilt));
                 if b > 1
                     ignoreDisk = true;
@@ -69,10 +69,11 @@ function [newTraj, diskValues, masks] = linearEquivalency(obj, weightedTrajector
             % For linear equivalent regions
             if ignoreDisk == false
                 masks(:,:,counter) = filt;
-                if ismember(a,obj.meanDisks)
+                if ismember(a,retinalMetamers.meanDisks) || ismember(a,retinalMetamers.metamerDisks)
                     
                     % Normalizing value
-                    T = sum(RFFilter .* filt,[1 2]);
+                    T = RFFilter .* filt;
+                    T = sum(T(:));
 
                     % Apply across trajectory
                     for c = 1:size(weightedTrajectory,4)
@@ -80,14 +81,14 @@ function [newTraj, diskValues, masks] = linearEquivalency(obj, weightedTrajector
                         diskValues(counter,c) = sum(S(:)) / T;
                         tempMask(:,:,1,c) = diskValues(counter,c) .* filt;
                     end
-                elseif ismember(a,obj.backgroundDisks)
+                elseif ismember(a,retinalMetamers.backgroundDisks)
                     
                     % Apply across trajectory
                     for c = 1:size(diskValues,2)
-                        tempMask(:,:,1,c) = obj.backgroundIntensity .* filt;
-                        diskValues(counter,c,:) = obj.backgroundIntensity;
+                        tempMask(:,:,1,c) = retinalMetamers.backgroundIntensity .* filt;
+                        diskValues(counter,c,:) = retinalMetamers.backgroundIntensity;
                     end
-                elseif ismember(a,obj.naturalDisks)
+                elseif ismember(a,retinalMetamers.naturalDisks)
                     
                     % Apply original image to region
                     for c = 1:size(diskValues,2)
@@ -95,26 +96,13 @@ function [newTraj, diskValues, masks] = linearEquivalency(obj, weightedTrajector
                         diskValues(counter,c,:) = NaN;
                     end
 
-                elseif ismember(a,obj.switchDisks)
+                elseif ismember(a,retinalMetamers.switchDisks)
                     % Apply specific intensity to region
                     for c = 1:size(diskValues,2)
-                        tempMask(:,:,1,c) = obj.switchTraj(c) .* filt;
-                        diskValues(counter,c,:) = obj.switchTraj(c);
+                        tempMask(:,:,1,c) = retinalMetamers.switchTraj(c) .* filt;
+                        diskValues(counter,c,:) = retinalMetamers.switchTraj(c);
                     end
                     
-                elseif ismember(a,obj.metamerDisks)
-                    
-                    % Normalizing disk
-                    F = filt;
-                    F(F == false) = NaN;
-                    T = RFFilter .* F;
-
-                    % Apply across trajectory
-                    for c = 1:size(weightedTrajectory,4)
-                        S = weightedTrajectory(:,:,1,c) .* F;
-                        diskValues(counter,c) = nanmean(S,[1,2]) / nanmean(T,[1,2]);
-                        tempMask(:,:,1,c) = diskValues(counter,c) .* filt;
-                    end  
                 else
                     error(strcat('please specify disk type for disk #',num2str(a)))
                 end
@@ -126,10 +114,10 @@ function [newTraj, diskValues, masks] = linearEquivalency(obj, weightedTrajector
 
     % Add surrounding mask
     surroundMask = (sum(masks,3) == 0);
-    newTraj = newTraj + surroundMask .* obj.backgroundIntensity;
+    newTraj = newTraj + repmat(surroundMask .* retinalMetamers.backgroundIntensity,1,1,1,size(newTraj,4));
 
     % Remove excess values
-    rm = find(sum(masks,[1,2]) == 0);
+    rm = find(squeeze(sum(sum(masks,1),2)) == 0);
     diskValues(rm,:,:) = [];
     masks(:,:,rm) = [];
 end

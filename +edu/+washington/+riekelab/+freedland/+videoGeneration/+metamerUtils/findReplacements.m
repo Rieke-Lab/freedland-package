@@ -23,23 +23,23 @@
 %           
 %%%
 
-function stimulus = findReplacements(obj,stimulus,databaseValues,databaseTraj)
+function stimulus = findReplacements(retinalMetamers,stimulus,databaseValues,databaseTraj)
 
-    stimulus.metamer = zeros(obj.videoSize(1),obj.videoSize(2),1,size(stimulus.values,2),obj.numberOfMetamerMovies);
-    stimulus.metamerProjection = zeros(obj.videoSize(1),obj.videoSize(2),1,size(stimulus.values,2),obj.numberOfMetamerMovies);
-    stimulus.error = zeros(obj.numberOfMetamerMovies,size(stimulus.values,2));
-    stimulus.metamerValues = zeros(size(stimulus.values,1),size(stimulus.values,2),obj.numberOfMetamerMovies);
+    stimulus.metamer = zeros(retinalMetamers.videoSize(1),retinalMetamers.videoSize(2),1,size(stimulus.values,2),retinalMetamers.numberOfMetamerMovies);
+    stimulus.metamerProjection = zeros(retinalMetamers.videoSize(1),retinalMetamers.videoSize(2),1,size(stimulus.values,2),retinalMetamers.numberOfMetamerMovies);
+    stimulus.error = zeros(retinalMetamers.numberOfMetamerMovies,size(stimulus.values,2));
+    stimulus.metamerValues = zeros(size(stimulus.values,1),size(stimulus.values,2),retinalMetamers.numberOfMetamerMovies);
     
     for a = 1:size(stimulus.values,2)
 
         % Find best replacement for each disk
         A = stimulus.values(:,a,:);
-        B = abs(A - databaseValues);
+        B = abs(repmat(A,1,size(databaseValues,2)) - databaseValues);
         [C,i] = sort(B,2);
 
         % Build best movies
-        for c = 1:obj.numberOfMetamerMovies % Find collections of good frames
-            stimulus.error(c,a) = nanmean(C(:,c)) ./ obj.backgroundIntensity * 100; % Calculated as percent contrast
+        for c = 1:retinalMetamers.numberOfMetamerMovies % Find collections of good frames
+            stimulus.error(c,a) = nanmean(C(:,c)) ./ retinalMetamers.backgroundIntensity * 100; % Calculated as percent contrast
             for b = 1:size(C,1)
                 if sum(isnan(C(b,:))) == 0
                     stimulus.metamer(:,:,1,a,c) = stimulus.metamer(:,:,1,a,c) + (databaseTraj(:,:,i(b,c)) .* stimulus.masks(:,:,b));
@@ -55,6 +55,6 @@ function stimulus = findReplacements(obj,stimulus,databaseValues,databaseTraj)
     end
 
     surroundMask = (sum(stimulus.masks,3) == 0);
-    stimulus.metamer = stimulus.metamer + surroundMask .* obj.backgroundIntensity;
-    stimulus.metamerProjection = stimulus.metamerProjection + surroundMask .* obj.backgroundIntensity;
+    stimulus.metamer = stimulus.metamer + repmat(surroundMask .* retinalMetamers.backgroundIntensity,1,1,1,size(stimulus.metamer,4));
+    stimulus.metamerProjection = stimulus.metamerProjection + repmat(surroundMask .* retinalMetamers.backgroundIntensity,1,1,1,size(stimulus.metamerProjection,4));
 end

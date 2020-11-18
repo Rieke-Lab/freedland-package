@@ -1,22 +1,22 @@
 % Load generic settings.
 
-function retinalMetamers = loadSettings(centerSigma,surroundSigma)
+function retinalMetamers = loadSettings(umPerPixel,canvasSize,frameRate,centerSigma,surroundSigma)
 
     % Cell information
     retinalMetamers.rfSigmaCenter       = centerSigma;   % in microns
     retinalMetamers.rfSigmaSurround     = surroundSigma; % in microns
     
     % Pixel information
-    retinalMetamers.micronsPerPixel     = 1.65;      % How many microns each pixel spans
-    retinalMetamers.monitorSize         = [600 800]; % Size of monitor [height, width]
-    retinalMetamers.monitorFrameRate    = 60;        % Hz
-    retinalMetamers.videoSize = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(retinalMetamers.monitorSize,retinalMetamers.micronsPerPixel,'pix2arcmin');
+    retinalMetamers.micronsPerPixel     = umPerPixel; % How many microns each pixel spans
+    retinalMetamers.monitorSize         = fliplr(canvasSize); % Size of monitor [height, width]
+    retinalMetamers.monitorFrameRate    = frameRate;  % Hz
+    retinalMetamers.videoSize = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(retinalMetamers.monitorSize,retinalMetamers.micronsPerPixel,'pix2arcmin');
     if mod(retinalMetamers.videoSize,2) == 0
         retinalMetamers.videoSize = retinalMetamers.videoSize + 1; % Ensure is odd (s.t. central pixel exists)
     end
 
     % Calculate the location of disks
-    [~,info] = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.rfUtils.calculateFilter(retinalMetamers);
+    [~,info] = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(retinalMetamers);
     retinalMetamers.diskRadii = [0,...                                                % At center of monitor
         info.percentExcitation(2,(info.percentExcitation(1,:) == 50)),... % At 50% excitation
         info.zeroPt,...                                                   % Where excitatory inputs -> inhibitory

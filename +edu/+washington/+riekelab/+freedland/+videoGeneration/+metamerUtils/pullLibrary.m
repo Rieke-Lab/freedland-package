@@ -4,33 +4,33 @@
 % Pulls the frame of every fixation from the DOVES database.
 %%%
 
-function imageFrames = pullLibrary(obj)
+function imageFrames = pullLibrary(retinalMetamers)
 
-    load('+images/fixationDatabase.mat')
-    obj.frameNumber = frameNumber;
-    obj.imageNumber = imageNumber;
+    load('freedland-package\+edu\+washington\+riekelab\+freedland\+images\fixationDatabase.mat')
+    retinalMetamers.frameNumber = frameNumber;
+    retinalMetamers.imageNumber = imageNumber;
     
     % Pixels on each side of the trajectory.
-    xLength = floor(obj.videoSize(2) / 2);
-    yLength = floor(obj.videoSize(1) / 2);
+    xLength = floor(retinalMetamers.videoSize(2) / 2);
+    yLength = floor(retinalMetamers.videoSize(1) / 2);
 
     % Identify images to load
-    A = unique(obj.imageNumber);
-    A(A == obj.imageNo) = []; % Don't include original image
+    A = unique(retinalMetamers.imageNumber);
+    A(A == retinalMetamers.imageNo) = []; % Don't include original image
 
-    imageFrames = zeros(yLength.*2+1,xLength.*2+1,1,length(obj.imageNumber)); % Collection of images
+    imageFrames = zeros(yLength.*2+1,xLength.*2+1,1,length(retinalMetamers.imageNumber)); % Collection of images
     counter = 1;
 
     for a = 1:length(A)
         tempImage = A(a);
-        [path,img,~] = utils.pathDOVES(tempImage, 1); % Pull image number
+        [path,img,~] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(tempImage, 1); % Pull image number
         
         % Scale pixels in image to monitor
         img = (img./max(max(img)));
         img = img.*255;
 
         % Identify number of fixations
-        frames = obj.frameNumber(obj.imageNumber == A(a));
+        frames = retinalMetamers.frameNumber(retinalMetamers.imageNumber == A(a));
 
         for b = 1:length(frames)
 

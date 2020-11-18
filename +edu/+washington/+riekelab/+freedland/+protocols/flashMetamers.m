@@ -15,6 +15,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         slices              = 8; % number of slices
         contrast            = 0.5; % 0 - 1
         randomize           = true;
+        includeProjections  = false; % double stimulus time by including uniform projections.
         
         backgroundIntensity = 0.168; % 0 - 1 
 
@@ -27,10 +28,10 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        backgroundIntensity
         imageDatabase
         counter
         order
+        stimulusValues
     end
 
     methods
@@ -53,43 +54,57 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','experimentID');
             
             % Load settings
-            retinalMetamers = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.demoUtils.loadSettings(70,170);
+            retinalMetamers = edu.washington.riekelab.freedland.videoGeneration.demoUtils.loadSettings(...
+                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
+                obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'),...
+                obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
+                obj.rfSigmaCenter,obj.rfSigmaSurround);
             retinalMetamers.slices              = obj.slices;
             retinalMetamers.sliceDisks          = 1;
             retinalMetamers.metamerDisks        = 1;
             retinalMetamers.imageNo             = 0;
-            retinalMetamers.diskRegions = obj.diskRadii([1 3]); % Place one disk between regions [1] and [3]
+            retinalMetamers.diskRegions = retinalMetamers.diskRadii([1 3]); % Place one disk between regions [1] and [3]
+            retinalMetamers.backgroundIntensity = obj.backgroundIntensity .* 255;
             
             % Generate intensity values
-            A = nchoosek(1:obj.slices,round(obj.slices/2)); % 
+            A = nchoosek(1:obj.slices,round(obj.slices/2));
             diskContrasts = ones(8,size(A,1)) * -obj.contrast;
+            obj.stimulusValues = ones(8,size(A,1)) * -1;
             for a = 1:size(A,1)
                 diskContrasts(A(a,:),a) = obj.contrast;
+                obj.stimulusValues(A(a,:),a) = 1;
             end
-            stimulus.values = obj.backgroundIntensity*255 + (diskContrasts .* (obj.backgroundIntensity*255)); % ON cell
+            stimulus.values = obj.backgroundIntensity*255 + (diskContrasts .* (obj.backgroundIntensity*255));
 
             %%% Make metamers
             % Pull cell-specific receptive field
-            [RFFilter,obj.rfSizing] = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.rfUtils.calculateFilter(obj);
+            RFFilter = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(retinalMetamers);
 
             % Compare stimulus against database
+            tic
             disp('Pulling metamer library...')
-            databaseTraj = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.metamerUtils.pullLibrary(obj);
-            weightedDatabaseTraj = databaseTraj .* RFFilter; % Convolve with stimulus
+            databaseTraj = edu.washington.riekelab.freedland.videoGeneration.metamerUtils.pullLibrary(retinalMetamers);
+            weightedDatabaseTraj = databaseTraj .* repmat(RFFilter,1,1,1,size(databaseTraj,4)); % Convolve with stimulus
 
             % Find linear-equivalent regions for cell-specific RF
             disp('Calculating low-dimensional projection...')
-            [~,databaseValues,stimulus.masks] =  edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.linearEquivalency(obj, weightedDatabaseTraj, RFFilter);
+            [~,databaseValues,stimulus.masks] =  edu.washington.riekelab.freedland.videoGeneration.utils.linearEquivalency(retinalMetamers, weightedDatabaseTraj, RFFilter);
 
             % Find best match to designed stimulus
-            output =  edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.metamerUtils.findReplacements(obj,stimulus,databaseValues,databaseTraj);
-            obj.imageDatabase = squeeze(output.metamer);
-            %%%
+            output = edu.washington.riekelab.freedland.videoGeneration.metamerUtils.findReplacements(retinalMetamers,stimulus,databaseValues,databaseTraj);
+            obj.imageDatabase = uint8(squeeze(output.metamer));
             
+            if obj.includeProjections == true;
+                obj.imageDatabase = cat(3,obj.imageDatabase,uint8(squeeze(output.metamerProjection)));
+                obj.stimulusValues = [obj.stimulusValues obj.stimulusValues];
+            end
+            toc
+            %%%
+
             % Setup display
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(1:size(obj.imageDatabase,3));
+                obj.order = randperm(size(obj.imageDatabase,3));
             else
                 obj.order = 1:size(obj.imageDatabase,3);
             end
@@ -104,7 +119,9 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
-            epoch.addParameter('experimentID',obj.order(obj.counter+1));
+            G  = obj.stimulusValues(:,obj.order(obj.counter+1))';
+            epoch.addParameter('diskIntensity',G);
+            epoch.addParameter('experimentID',find(G == 1,1,'first'));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -125,9 +142,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Prep to display image
             scene = stage.builtin.stimuli.Image(specificImage);
-            sz = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                size(specificImage,1),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'VH2PIX');
-            scene.size = [sz sz];
+            scene.size = canvasSize;
             p0 = canvasSize/2;
             scene.position = p0;
             
@@ -140,21 +155,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
-            
-            % Add mask
-            aperatureDiameter = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                obj.maskRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2PIX') .* 2);
-            
-            if (aperatureDiameter > 0) %% Create aperture
-                aperture = stage.builtin.stimuli.Rectangle();
-                aperture.position = canvasSize/2;
-                aperture.color = obj.backgroundIntensity;
-                aperture.size = [max(canvasSize) max(canvasSize)];
-                mask = stage.core.Mask.createCircularAperture(aperatureDiameter/max(canvasSize), 1024); %circular aperture
-                aperture.setMask(mask);
-                p.addStimulus(aperture); %add aperture
-            end
-            
+
             obj.counter = mod(obj.counter + 1,length(obj.order));
         end
 

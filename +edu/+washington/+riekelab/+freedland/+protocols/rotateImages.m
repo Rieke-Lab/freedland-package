@@ -97,8 +97,8 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Prep to display image
             scene = stage.builtin.stimuli.Image(specificImage);
-            sz = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                size(specificImage,1),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'VH2PIX');
+            sz = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                size(specificImage,1),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix');
             scene.size = [sz sz];
             p0 = canvasSize/2;
             scene.position = p0;
@@ -114,8 +114,8 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             p.addController(sceneVisible);
             
             % Add mask
-            aperatureDiameter = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                obj.maskRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2PIX') .* 2);
+            aperatureDiameter = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.maskRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix') .* 2);
             
             if (aperatureDiameter > 0) %% Create aperture
                 aperture = stage.builtin.stimuli.Rectangle();
@@ -133,8 +133,8 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         function imageFrame = findImage(obj)
             
             % Relevant frame size
-            pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.maskRadius,...
-                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2VH'));
+            pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(obj.maskRadius,...
+                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin'));
 
             [empiricalPath, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(...
                 obj.imageNo,obj.observerNo);

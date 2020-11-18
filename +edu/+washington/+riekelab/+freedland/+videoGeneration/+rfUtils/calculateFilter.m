@@ -15,15 +15,15 @@
 %           info: select calculations (in ARCMIN)
 %%%
 
-function [RFFilter,info] = calculateFilter(obj)
+function [RFFilter,info] = calculateFilter(retinalMetamers)
 
     % Convert neuron's RF to DOVES VH units.
-    centerSigma = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.rfSigmaCenter,obj.micronsPerPixel,'um2arcmin');
-    surroundSigma = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.changeUnits(obj.rfSigmaSurround,obj.micronsPerPixel,'um2arcmin');
+    centerSigma = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(retinalMetamers.rfSigmaCenter,retinalMetamers.micronsPerPixel,'um2arcmin');
+    surroundSigma = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(retinalMetamers.rfSigmaSurround,retinalMetamers.micronsPerPixel,'um2arcmin');
 
     % Generate 2D gaussians
-    centerGaus = fspecial('gaussian',[obj.videoSize(1) obj.videoSize(2)],centerSigma);
-    surroundGaus = fspecial('gaussian',[obj.videoSize(1) obj.videoSize(2)],surroundSigma);
+    centerGaus = fspecial('gaussian',[retinalMetamers.videoSize(1) retinalMetamers.videoSize(2)],centerSigma);
+    surroundGaus = fspecial('gaussian',[retinalMetamers.videoSize(1) retinalMetamers.videoSize(2)],surroundSigma);
 
     % Calculate difference of gaussians
     diffGaussian = centerGaus - surroundGaus;
@@ -31,7 +31,7 @@ function [RFFilter,info] = calculateFilter(obj)
 
     %%% Extract RF information
     % Take 2D slice of half-gaussian.
-    slice       = RFFilter(round(obj.videoSize(1)/2),round(obj.videoSize(2)/2):end); 
+    slice       = RFFilter(round(retinalMetamers.videoSize(1)/2),round(retinalMetamers.videoSize(2)/2):end); 
     curvature   = diff(slice);        % Derivative
     tot         = cumsum(slice);    
     tot         = tot ./ max(tot(:)); % Normalized integral

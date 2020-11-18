@@ -110,10 +110,10 @@ classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.monitorSize = obj.rig.getDevice('Stage').getCanvasSize();
             obj.monitorSize = fliplr(obj.monitorSize); % Adjust to [height, width]
             obj.monitorFrameRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
-            obj.videoSize = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(obj.monitorSize,obj.micronsPerPixel,'PIX2VH');
+            obj.videoSize = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(obj.monitorSize,obj.micronsPerPixel,'pix2arcmin');
 
             % Pull filter
-            rfFilter = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.calculateFilter(obj,false);
+            rfFilter = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(obj);
 
             % Scale excitatory/inhibitory regions accordingly.
             if strcmp(obj.cellClass,'ON')

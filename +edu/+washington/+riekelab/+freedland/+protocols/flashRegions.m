@@ -54,8 +54,8 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Convert units
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2PIX');
+            centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             
             %%% Create pixel space
             [xx,yy] = meshgrid(1:canvasSize(2),1:canvasSize(1));

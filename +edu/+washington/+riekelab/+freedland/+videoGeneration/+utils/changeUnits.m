@@ -4,49 +4,45 @@
 %%% Change units within retinalMetamers.
 %
 % Using user settings for "micronsPerPixel" (um/pix), we define a series of units:
-% VH:   units used in eye tracking studies, courtesy of the DOVES database
-%       (200Hz sampling)
-% UM:   microns (across the retina)
-% PIX:  monitor pixels (output).
+%   arcmin:   arc minutes. also: units used in eye tracking studies, courtesy of the DOVES database
+%   um:       microns (across the retina)
+%   pix:      monitor pixels (output).
 %
 % micronsPerPixel:  number of microns each output monitor pixel spans.
 %                   depends on experimental setup.
-%
-% Created by JMF 03/2020
-% Last edited by JMF 03/2020
 %%%
 
 function B = changeUnits(A,micronsPerPixel,type)
             
-    if strcmp(type,'UM2PIX')
+    if strcmp(type,'um2pix')
         % um / (um/pix) = pix
         B = A ./ micronsPerPixel;
 
-    elseif strcmp(type,'PIX2UM')
+    elseif strcmp(type,'pix2um')
         % pix * (um/pix) = um
         B = A .* micronsPerPixel;
 
-    elseif strcmp(type,'UM2VH')
-        % From DOVES database: 1 VH pixel = 1 arcmin = 3.3 um on monkey retina
-        % um / (3.3 um/VH) = VH
+    elseif strcmp(type,'um2arcmin')
+        % From DOVES database: 1 pixel = 1 arcmin.
+        % um / (3.3 um/arcmin) = arcmin
         B = A ./ 3.3;
 
-    elseif strcmp(type,'VH2UM')
-        % VH * (3.3 um/VH) = um
+    elseif strcmp(type,'arcmin2um')
+        % arcmin * (3.3 um/arcmin) = um
         B = A .* 3.3;
 
-    elseif strcmp(type,'PIX2VH')
-        % (3.3 um/VH) / (um/pix) = pix/VH
+    elseif strcmp(type,'pix2arcmin')
+        % (3.3 um/arcmin) / (um/pix) = pix/VH
         ratio = 3.3 ./ micronsPerPixel;
 
         % pix / (pix/VH) = VH
         B = A ./ ratio;
 
-    elseif strcmp(type,'VH2PIX')
-        % (3.3 um/VH) / (um/pix) = pix/VH
+    elseif strcmp(type,'arcmin2pix')
+        % (3.3 um/arcmin) / (um/pix) = pix/arcmin
         ratio = 3.3 ./ micronsPerPixel;
 
-        % VH * (pix/VH) = pix
+        % arcmin * (pix/arcmin) = pix
         B = A .* ratio;
     else
         error('incorrect unit conversion.')

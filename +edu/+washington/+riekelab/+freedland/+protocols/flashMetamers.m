@@ -12,8 +12,11 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
         
         % image info
-        contrast = 0.5; % 0 - 1
-        randomize = true;  % randomize each rotation
+        slices              = 8; % number of slices
+        contrast            = 0.5; % 0 - 1
+        randomize           = true;
+        
+        backgroundIntensity = 0.168; % 0 - 1 
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -49,43 +52,40 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.showFigure('edu.washington.riekelab.freedland.figures.receptiveFieldFitFigure',...
                 obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','experimentID');
             
-            % Check for errors
-            if length(obj.imageNo) ~= length(obj.frame)
-                error('The number of images and frames to probe must be equal.')
+            % Load settings
+            retinalMetamers = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.demoUtils.loadSettings(70,170);
+            retinalMetamers.slices              = obj.slices;
+            retinalMetamers.sliceDisks          = 1;
+            retinalMetamers.metamerDisks        = 1;
+            retinalMetamers.imageNo             = 0;
+            retinalMetamers.diskRegions = obj.diskRadii([1 3]); % Place one disk between regions [1] and [3]
+            
+            % Generate intensity values
+            A = nchoosek(1:obj.slices,round(obj.slices/2)); % 
+            diskContrasts = ones(8,size(A,1)) * -obj.contrast;
+            for a = 1:size(A,1)
+                diskContrasts(A(a,:),a) = obj.contrast;
             end
-            
-            % General directory
-            obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies';
-            D = dir(obj.directory);
-            
-            % Find correct folder
-            seedName = [mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround)];
-            for a = 1:length(D)
-                if strfind(D(a).name,seedName) > 0
-                    folderName = D(a).name;
-                end
-            end
-            
-            % Correct directory, find .mat file
-            obj.directory = [obj.directory,'/',folderName];
-            D = dir(obj.directory);
-            filename = strcat(mat2str(round(obj.contrast*100)),'_metamerFlash');
-            fullFilename = [];
-            for a = 1:length(D)
-                if sum(strfind(D(a).name,filename)) > 0
-                    fullFilename = D(a).name;
-                end
-            end
-            
-            if isempty(fullFilename)
-                error('Cannot find metamer .mat file.')
-            else
-                filename = [obj.directory,'/',folderName,'/',fullFilename];
-                load(filename)
-            end
-            
-            obj.imageDatabase = uint8(squeeze(metamerData));
+            stimulus.values = obj.backgroundIntensity*255 + (diskContrasts .* (obj.backgroundIntensity*255)); % ON cell
 
+            %%% Make metamers
+            % Pull cell-specific receptive field
+            [RFFilter,obj.rfSizing] = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.rfUtils.calculateFilter(obj);
+
+            % Compare stimulus against database
+            disp('Pulling metamer library...')
+            databaseTraj = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.metamerUtils.pullLibrary(obj);
+            weightedDatabaseTraj = databaseTraj .* RFFilter; % Convolve with stimulus
+
+            % Find linear-equivalent regions for cell-specific RF
+            disp('Calculating low-dimensional projection...')
+            [~,databaseValues,stimulus.masks] =  edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.utils.linearEquivalency(obj, weightedDatabaseTraj, RFFilter);
+
+            % Find best match to designed stimulus
+            output =  edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.metamerUtils.findReplacements(obj,stimulus,databaseValues,databaseTraj);
+            obj.imageDatabase = squeeze(output.metamer);
+            %%%
+            
             % Setup display
             obj.counter = 0;
             if obj.randomize == true

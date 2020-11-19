@@ -80,7 +80,7 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             if isempty(controlMov) || isempty(testMov)
                 error('Cannot find correct movie.')
             end
-            obj.movieFilenames = repmat([controlMov;testMov],length(obj.offsets),1);
+            obj.movieFilenames = repmat([{controlMov};{testMov}],length(obj.offsets),1);
 
             % Find background intensity
             [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(81, 1,...
@@ -89,8 +89,8 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             img = (img./max(max(img)));
             obj.backgroundIntensity = mean(img(:));
             
-            obj.offsetsPix = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                obj.offsets,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2PIX');
+            obj.offsetsPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.offsets,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             obj.offsetsPix = repelem(obj.offsetsPix,1,2);
             obj.sequence = repmat(1:length(obj.offsetsPix),1,obj.numberOfAverages);
             
@@ -112,9 +112,8 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addResponse(device);
             
             epoch.addParameter('movieName',obj.movieFilenames{obj.sequence(obj.counter),1});
-            
-            offsetUm = edu.washington.riekelab.freedland.videoGeneration.retinalMetamers.changeUnits(...
-                obj.offsetsPix(obj.sequence(obj.counter)),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'UM2PIX');
+            offsetUm = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.offsetsPix(obj.sequence(obj.counter)),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2um');
             epoch.addParameter('offset',offsetUm);
 
             % Add metadata from Stage, makes analysis easier.
@@ -139,7 +138,7 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             scene = stage.builtin.stimuli.Movie(fullfile(obj.directory,f));
             scene.size = [canvasSize(1),canvasSize(2)];
             p0 = canvasSize/2;
-            p0 = p0(1) + obj.offsetsPix(obj.counter);
+            p0(1) = p0(1) + obj.offsetsPix(obj.counter);
             scene.position = p0;
             
             % Use linear interpolation when scaling the image
@@ -147,7 +146,6 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             scene.setMagFunction(GL.LINEAR);
 
             p.addStimulus(scene);
-            
             obj.counter = obj.counter + 1;
         end
 

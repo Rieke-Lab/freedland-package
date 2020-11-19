@@ -70,9 +70,9 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             testMov = [];
             imgStr = strcat('img',num2str(obj.imageNumber));
             for a = 1:length(D)
-                if sum(strfind(D(a).name,obj.controlVideo)) > 0 || sum(strfind(D(a).name,imgStr)) > 0
+                if sum(strfind(D(a).name,obj.controlVideo)) > 0 && sum(strfind(D(a).name,imgStr)) > 0
                     controlMov = D(a).name;
-                elseif sum(strfind(D(a).name,obj.testVideo)) > 0 || sum(strfind(D(a).name,imgStr)) > 0
+                elseif sum(strfind(D(a).name,obj.testVideo)) > 0 && sum(strfind(D(a).name,imgStr)) > 0
                     testMov = D(a).name;
                 end
             end

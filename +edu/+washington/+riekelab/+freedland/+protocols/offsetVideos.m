@@ -97,7 +97,7 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             if obj.randomize == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
-            obj.counter = 1;
+            obj.counter = 0;
         
         end
         
@@ -111,9 +111,9 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             
-            epoch.addParameter('movieName',obj.movieFilenames{obj.sequence(obj.counter),1});
+            epoch.addParameter('movieName',obj.movieFilenames{obj.sequence(obj.counter+1),1});
             offsetUm = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.offsetsPix(obj.sequence(obj.counter)),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2um');
+                obj.offsetsPix(obj.sequence(obj.counter+1)),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2um');
             epoch.addParameter('offset',offsetUm);
 
             % Add metadata from Stage, makes analysis easier.
@@ -131,14 +131,14 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity);
             
-            selection = obj.sequence(obj.counter);
+            selection = obj.sequence(obj.counter+1);
             f = obj.movieFilenames{selection,1}; % filename for relevant movie
 
             % Prep to display image
             scene = stage.builtin.stimuli.Movie(fullfile(obj.directory,f));
             scene.size = [canvasSize(1),canvasSize(2)];
             p0 = canvasSize/2;
-            p0(1) = p0(1) + obj.offsetsPix(obj.counter);
+            p0(1) = p0(1) + obj.offsetsPix(obj.counter+1);
             scene.position = p0;
             
             % Use linear interpolation when scaling the image
@@ -146,7 +146,7 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             scene.setMagFunction(GL.LINEAR);
 
             p.addStimulus(scene);
-            obj.counter = obj.counter + 1;
+            obj.counter = mod(obj.counter + 1,obj.sequence);
         end
 
         function tf = shouldContinuePreparingEpochs(obj)

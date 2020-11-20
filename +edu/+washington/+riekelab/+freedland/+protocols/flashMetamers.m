@@ -15,7 +15,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         slices              = 8; % number of slices
         contrast            = 0.5; % 0 - 1
         randomize           = true;
-        includeProjections  = false; % double stimulus time by including uniform projections.
+        includeProjections  = true; % double stimulus time by including uniform projections.
         
         backgroundIntensity = 0.168; % 0 - 1 
 
@@ -32,6 +32,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         counter
         order
         stimulusValues
+        imageID
     end
 
     methods
@@ -93,10 +94,12 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Find best match to designed stimulus
             output = edu.washington.riekelab.freedland.videoGeneration.metamerUtils.findReplacements(retinalMetamers,stimulus,databaseValues,databaseTraj);
             obj.imageDatabase = uint8(squeeze(output.metamer));
+            obj.imageID = repelem({'metamer'},size(obj.imageDatabase,3),1);
             
-            if obj.includeProjections == true;
+            if obj.includeProjections == true
                 obj.imageDatabase = cat(3,obj.imageDatabase,uint8(squeeze(output.metamerProjection)));
                 obj.stimulusValues = [obj.stimulusValues obj.stimulusValues];
+                obj.imageID = [obj.imageID; repelem({'projection'},size(obj.imageDatabase,3),1)];;
             end
             toc
             %%%
@@ -121,7 +124,8 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             G  = obj.stimulusValues(:,obj.order(obj.counter+1))';
             epoch.addParameter('diskIntensity',G);
-            epoch.addParameter('experimentID',find(G == 1,1,'first'));
+            epoch.addParameter('experimentID',sum(find(G == 1)));
+            epoch.addParameter('imageType',obj.imageID{obj.order(obj.counter+1),1});
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));

@@ -16,8 +16,8 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         % Brightness
         diskIntensity           = 0.319;    % 0 to 1
         backgroundIntensity     = 0.168;    % 0 to 1
-        addNegativeIntensity    = true;     % Add trials with negative-contrast center-only disks
-        addSurround             = true;     % Add uniform positive-contrast disk to trials.
+        addNegativeIntensity    = true;     % Add trials with opposite-contrast center-only disks
+        addSurround             = true;     % Add uniform postive-contrast disk.
         
         % Additional parameters
         onlineAnalysis = 'extracellular'

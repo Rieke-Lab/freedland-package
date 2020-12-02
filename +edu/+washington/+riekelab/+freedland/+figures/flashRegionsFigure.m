@@ -110,19 +110,16 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
         end
         
         function onSelectedCalculateWeights(obj, ~, ~)
-            x = obj.summaryData.trackingSpotSizes;
+            A = obj.summaryData.trackingSpotSizes;
             B = obj.summaryData.trackingResponses;
-            
-            % Find 1D cases, place as X
-            B1D = repmat(B(sum(x,2) == 1)',size(x,1),1);
-            A = x.*B1D;
             
             % A * w = B, where w is weights
             w = A\B;
 
             % Export
             title(obj.axesHandle,num2str(w));
-            dlmwrite(strcat('Documents/weights.txt'),w')
+            w = [w, w/max(w)]'; % Add row for normalization
+            dlmwrite(strcat('Documents/weights.txt'),w)
             disp(w)
         end
         

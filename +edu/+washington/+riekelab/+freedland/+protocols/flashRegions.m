@@ -9,15 +9,18 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Image information
         centerRadius = 100;  % in um
-        centerCuts   = 8;    % number of slices to divide center into
+        slices       = 8;    % number of spatial slices to divide into
+        sliceLocation = 'center'; % location of flashing slices: center or surround
         rotate       = 0;    % degrees to rotate slices
-        randomize    = true; % randomize order to present slices
+        randomize    = true; % randomize flashing order
         
         % Brightness
-        diskIntensity           = 0.319;    % 0 to 1
-        backgroundIntensity     = 0.168;    % 0 to 1
-        addNegativeIntensity    = true;     % Add trials with negative-contrast center-only disks
-        addSurround             = true;     % Add uniform positive-contrast disk to trials.
+        diskIntensity       = 0.319; % 0 to 1
+        backgroundIntensity = 0.168; % 0 to 1
+        
+        % Add-ons
+        includeNegativeIntensity = true; % Add negative-contrast regions.
+        includeSurroundIntensity = true; % For center-only stimuli, add surround flashes.
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -28,6 +31,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        sliceLocationType = symphonyui.core.PropertyType('char', 'row', {'center', 'surround'}) 
         disks
         selections
         order
@@ -72,19 +76,30 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             %%%
 
             % Build masks
-            rotations = 0:360/obj.centerCuts:360;
-            obj.disks = zeros(size(r,1),size(r,2),obj.centerCuts);
+            rotations = 0:360/obj.slices:360;
+            obj.disks = zeros(size(r,1),size(r,2),obj.slices);
             totalCombinations = 0;
-            for a = 1:obj.centerCuts
-                obj.disks(:,:,a) = (r <= centerRadiusPix) .* (th >= rotations(a) & th < rotations(a+1));
-                totalCombinations = totalCombinations + nchoosek(obj.centerCuts,a);
+            for a = 1:obj.slices
+                if strcmp(obj.sliceLocation,'center')
+                    obj.disks(:,:,a) = (r <= centerRadiusPix) .* (th >= rotations(a) & th < rotations(a+1));
+                elseif strcmp(obj.sliceLocation,'surround')
+                    obj.disks(:,:,a) = (r > centerRadiusPix & r <= min(canvasSize)/2) .* (th >= rotations(a) & th < rotations(a+1));
+                end
+                totalCombinations = totalCombinations + nchoosek(obj.slices,a);
+            end
+            
+            % Add uniform region
+            if strcmp(obj.sliceLocation,'center')
+                obj.disks = cat(3,obj.disks,(r > centerRadiusPix & r <= min(canvasSize)/2));
+            elseif strcmp(obj.sliceLocation,'surround')
+                obj.disks = cat(3,(r <= centerRadiusPix),obj.disks);
             end
 
-            % Define all possible combinations, center only
-            obj.selections = zeros(totalCombinations,obj.centerCuts);
+            % Define all possible combinations
+            obj.selections = zeros(totalCombinations,obj.slices);
             counter1 = 1;
-            for a = 1:obj.centerCuts
-                A = nchoosek(1:obj.centerCuts,a);
+            for a = 1:obj.slices
+                A = nchoosek(1:obj.slices,a);
                 for b = 1:size(A,1)
                     obj.selections(counter1,A(b,:)) = 1;
                     counter1 = counter1+1;
@@ -95,40 +110,37 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Adding a negative option for every combination of disks
             % produces an extremely large set. To minimize time:
             negativeDiskDimension = 2; % Dimensional space to add negative disks for.
-            
-            if obj.addNegativeIntensity == true
-                A = obj.selections(sum(obj.selections,2) == negativeDiskDimension,:);
-                negativeDisks = [];
-                for a = 1:obj.centerCuts % Permutations matter
-                    v = ones(size(A,1),size(A,2));
-                    v(:,a) = -1;
-                    negativeDisks = [negativeDisks; A .* v];
+            if obj.includeNegativeIntensity == true
+                % Identify all trials at proper dimension
+                dimSelect = obj.selections(sum(obj.selections,2) == negativeDiskDimension,:);
+                for a = 1:obj.slices
+                    v = ones(size(dimSelect,1),size(dimSelect,2));
+                    v(:,a) = -1; % Negate one disk
+                    obj.selections = [obj.selections; dimSelect .* v];
                 end
-                negativeDisks = unique(negativeDisks,'rows');
-                negativeDisks(sum(negativeDisks,2) == negativeDiskDimension,:) = [];
-                obj.selections = [obj.selections; unique(negativeDisks,'rows')];
+                obj.selections = unique(obj.selections,'rows');
             end
 
-            %%%%%%%%% For adding surround flashes.
-            % Adding surround disks to every combination of central disks
-            % produces an extremely large set. To minimize time:
-            surroundDiskDimension = 2; % Dimensional space to add surround for.
-            
-            if obj.addSurround == true
-                % Add additional disk (surround)
-                obj.selections = [obj.selections repelem(0,size(obj.selections,1),1)];
-                A = obj.selections(sum(obj.selections,2) == surroundDiskDimension,:);
-                A(:,end) = 1; % Repeat flashes with surround flashed
-                obj.selections = [obj.selections;A];
+            if strcmp(obj.sliceLocation,'center')
+                % Ignore surround entirely
+                obj.selections = [obj.selections,repelem(0,size(obj.selections,1),1)];
                 
-                % Form disk
-                B = (r > centerRadiusPix & r <= min(canvasSize/2));
-                obj.disks = cat(3,obj.disks,B);
+                if obj.includeSurroundIntensity == true
+                    % Add surround for specific dimensions only
+                    surroundDiskDimension = 2;
+                    dimSelect = obj.selections(sum(obj.selections == -1,2) == 0 &...
+                        sum(obj.selections,2) == surroundDiskDimension,:); 
+                    dimSelect(:,end) = 1; % Allow surround to be present
+                    obj.selections = [obj.selections; dimSelect];
+                end
+            elseif strcmp(obj.sliceLocation,'surround')
+                % If we flash in the surround, the center must ALWAYS be
+                % included in the flash to better measure inhibition.
+                obj.selections = [repelem(1,size(obj.selections,1),1), obj.selections];
             end
             
-            totalCombinations = size(obj.selections,1);
-            disp(strcat('total disk combinations: ',mat2str(totalCombinations)));
-            totalTime = (totalCombinations * obj.numberOfAverages) * ((obj.preTime + obj.stimTime + obj.tailTime + 1500)/1000);
+            disp(strcat('total disk combinations: ',mat2str(size(obj.selections,1))));
+            totalTime = (size(obj.selections,1) * obj.numberOfAverages) * ((obj.preTime + obj.stimTime + obj.tailTime + 1500)/1000);
             disp(strcat('approx stimulus time (+1.5 sec delay):',mat2str(round(totalTime/60)),' minutes'));
 
             obj.counter = 0;
@@ -165,19 +177,22 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             % Set image
             p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
-            positiveDisks = obj.selections(obj.order(obj.counter+1),:) == 1; % Already at intensity
+            
+            % Image with positive contrast
+            positiveDisks = obj.selections(obj.order(obj.counter+1),:) == 1;
             posImage = sum(obj.disks(:,:,positiveDisks),3) .* obj.diskIntensity;
             
-            negativeDisks = obj.selections(obj.order(obj.counter+1),:) == -1;
-            
+            % Image with negative contrast
             contrast = abs(obj.backgroundIntensity - obj.diskIntensity);
             if obj.diskIntensity > obj.backgroundIntensity % ON Cell
                 oppDiskIntensity = (obj.backgroundIntensity - contrast);
             else
                 oppDiskIntensity = (obj.backgroundIntensity + contrast);
             end
+            negativeDisks = obj.selections(obj.order(obj.counter+1),:) == -1;
             negImage = sum(obj.disks(:,:,negativeDisks),3) .* oppDiskIntensity;
             
+            % Combine images
             image = posImage + negImage;
             image(image == 0) = obj.backgroundIntensity;
             

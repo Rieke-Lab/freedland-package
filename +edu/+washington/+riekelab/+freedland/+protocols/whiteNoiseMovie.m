@@ -1,17 +1,17 @@
 % Flashes white noise to identify subunits.
 % Methodology courtesy of "Nishal P. Shah, N. Brackbill, C. Rhoades, A. Tikidji-Hamburyan, G. Goetz, A. Litke, A. Sher, E. P. Simoncelli, E.J. Chichilnisky. Inference of Nonlinear Receptive Field Subunits with Spike-Triggered Clustering. ELife, 2020"
 % By J. Freedland, 2020.
-classdef flashWhiteNoise < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef whiteNoiseMovie < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
-        preTime  = 250 % in ms
-        stimTime = 250 % in ms
-        tailTime = 250 % in ms
+        preTime     = 250  % in ms
+        stimTime    = 10   % individual movie length, in seconds
+        tailTime    = 250  % in ms
+        totalTime   = 20  % total recording time across all movies, in minutes
         
         % White noise information
         centerRadius = 100;  % in um (region where white noise is displayed)
         pixelSize    = 20.8; % in um (Shah et. al. uses 20.8 & 41.6 um)
-        uniqueFrames = 500;  % number of unique frames of white noise
         
         % Luminance information
         backgroundIntensity = 0.168; % light intensity of background; 0-1
@@ -19,7 +19,6 @@ classdef flashWhiteNoise < edu.washington.riekelab.protocols.RiekeLabStageProtoc
         
         % Additional parameters
         onlineAnalysis      = 'extracellular'
-        numberOfAverages    = uint16(1) % number of epochs to queue
         amp % Output amplifier
     end
     
@@ -27,6 +26,7 @@ classdef flashWhiteNoise < edu.washington.riekelab.protocols.RiekeLabStageProtoc
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         imageData
+        directory
         counter
         order
     end
@@ -54,33 +54,38 @@ classdef flashWhiteNoise < edu.washington.riekelab.protocols.RiekeLabStageProtoc
                 obj.pixelSize,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             noiseSize = ceil(canvasSize/pix); % Number of unique noisy pixels
             
-            % Randomly generate noise
-            obj.imageData = rand([noiseSize,obj.uniqueFrames]); % For analysis
-            
-            % Rectify (evenly distributed between 0 to 1)
-            A = (obj.imageData < 1/3);
-            B = (obj.imageData > 1/3 & obj.imageData <= 2/3);
-            C = (obj.imageData > 2/3);
-            obj.imageData(A) = obj.backgroundIntensity .* (1-obj.contrast) .* 255; % Negative contrast
-            obj.imageData(B) = obj.backgroundIntensity .* 255;                     % No change
-            obj.imageData(C) = obj.backgroundIntensity .* (1+obj.contrast) .* 255; % Positive contrast
-            
-            % Only consider within associated region
+            % Only consider pixels within associated region
             [xx,yy] = meshgrid(1:noiseSize(2),1:noiseSize(1));
             r = sqrt((xx - noiseSize(2)/2).^2 + (yy - noiseSize(1)/2).^2);
             centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             cutoff = (r > ceil(centerRadiusPix/pix));
             
-            % Restrict result
-            obj.imageData(repmat(cutoff,1,1,size(obj.imageData,3))) = obj.backgroundIntensity .* 255;
+            % Randomly generate noise in small groups
+            obj.imageData = cell(ceil((obj.totalTime*60)/obj.stimTime),1);
+            refreshRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
+            tic
+            for a = 1:ceil((obj.totalTime*60)/obj.stimTime)
+                
+                % Generate noise as N x M x 1 x F matrix
+                subgroup = rand([noiseSize,1,obj.stimTime*refreshRate]);
+                
+                % Evenly rectify into pixels
+                A = (subgroup < 1/3);
+                B = (subgroup > 1/3 & subgroup <= 2/3);
+                C = (subgroup > 2/3);
+                subgroup(A) = obj.backgroundIntensity .* (1-obj.contrast) .* 255; % Negative contrast
+                subgroup(B) = obj.backgroundIntensity .* 255;                     % No change
+                subgroup(C) = obj.backgroundIntensity .* (1+obj.contrast) .* 255; % Positive contrast
+                
+                % Force surround to be static
+                subgroup(repmat(cutoff,1,1,1,size(subgroup,4))) = obj.backgroundIntensity .* 255;
+                obj.imageData{a,1} = subgroup;
+            end
+            toc
             
             obj.counter = 0;
-            obj.order = 1:size(obj.imageData,3);
-            
-            % Display est. stimulus time
-            totalTime = (obj.uniqueFrames * obj.numberOfAverages) * ((obj.preTime + obj.stimTime + obj.tailTime + 1500)/1000);
-            disp(strcat('approx stimulus time (+1.5 sec delay):',mat2str(round(totalTime/60)),' minutes'));
+            obj.order = 1:size(obj.imageData,4);
         end
             
         function prepareEpoch(obj, epoch)
@@ -90,7 +95,7 @@ classdef flashWhiteNoise < edu.washington.riekelab.protocols.RiekeLabStageProtoc
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            epoch.addParameter('imageMatrix',obj.imageData(:,:,obj.order(obj.counter+1)));
+            epoch.addParameter('imageMatrix',squeeze(obj.imageData{obj.order(obj.counter+1),1}));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -107,10 +112,10 @@ classdef flashWhiteNoise < edu.washington.riekelab.protocols.RiekeLabStageProtoc
 
             % Set image
             p.setBackgroundColor(obj.backgroundIntensity) % Set background intensity
-            imageMatrix = obj.imageData(:,:,obj.order(obj.counter+1));
+            imageMatrix = obj.imageData{obj.order(obj.counter+1),1};
             
             % Prep to display image
-            scene = stage.builtin.stimuli.Image(imageMatrix);
+            scene = edu.washington.riekelab.freedland.stage.Movie(imageMatrix);
             scene.size = canvasSize;
             p0 = canvasSize/2;
             scene.position = p0;

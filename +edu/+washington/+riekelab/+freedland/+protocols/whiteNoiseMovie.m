@@ -5,9 +5,9 @@ classdef whiteNoiseMovie < edu.washington.riekelab.protocols.RiekeLabStageProtoc
     properties
         % Stimulus timing
         preTime     = 250  % in ms
-        stimTime    = 10   % individual movie length, in seconds
         tailTime    = 250  % in ms
-        totalTime   = 20  % total recording time across all movies, in minutes
+        stimTime    = 10   % individual movie length, in seconds
+        totalTime   = 15  % total recording time across all movies, in minutes
         
         % White noise information
         centerRadius = 100;  % in um (region where white noise is displayed)
@@ -25,10 +25,13 @@ classdef whiteNoiseMovie < edu.washington.riekelab.protocols.RiekeLabStageProtoc
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        imageData
+        movieName
+        ranges
         directory
         counter
         order
+        movieMatrix
+        filename
     end
 
     methods
@@ -61,31 +64,31 @@ classdef whiteNoiseMovie < edu.washington.riekelab.protocols.RiekeLabStageProtoc
                 obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             cutoff = (r > ceil(centerRadiusPix/pix));
             
-            % Randomly generate noise in small groups
-            obj.imageData = cell(ceil((obj.totalTime*60)/obj.stimTime),1);
+            % Randomly generate noise
             refreshRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
-            tic
-            for a = 1:ceil((obj.totalTime*60)/obj.stimTime)
                 
-                % Generate noise as N x M x 1 x F matrix
-                subgroup = rand([noiseSize,1,obj.stimTime*refreshRate]);
+            % Generate noise as N x M x 1 x F matrix
+            noise = rand([noiseSize,1,obj.totalTime*60*refreshRate]);
                 
-                % Evenly rectify into pixels
-                A = (subgroup < 1/3);
-                B = (subgroup > 1/3 & subgroup <= 2/3);
-                C = (subgroup > 2/3);
-                subgroup(A) = obj.backgroundIntensity .* (1-obj.contrast) .* 255; % Negative contrast
-                subgroup(B) = obj.backgroundIntensity .* 255;                     % No change
-                subgroup(C) = obj.backgroundIntensity .* (1+obj.contrast) .* 255; % Positive contrast
-                
-                % Force surround to be static
-                subgroup(repmat(cutoff,1,1,1,size(subgroup,4))) = obj.backgroundIntensity .* 255;
-                obj.imageData{a,1} = subgroup;
-            end
-            toc
+            % Evenly rectify into pixels
+            A = (noise < 1/3);
+            B = (noise > 1/3 & noise <= 2/3);
+            C = (noise > 2/3);
+            noise(A) = obj.backgroundIntensity .* (1-obj.contrast) .* 255; % Negative contrast
+            noise(B) = obj.backgroundIntensity .* 255;                     % No change
+            noise(C) = obj.backgroundIntensity .* (1+obj.contrast) .* 255; % Positive contrast
+            noise(repmat(cutoff,1,1,1,size(noise,4))) = obj.backgroundIntensity .* 255; % Surround is static
+
+            % Export data into .mat file
+            obj.filename = strcat('Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/whiteNoise');
+            obj.movieMatrix = noise;
+            obj.movieName = strcat(obj.filename,'.mp4');
+            save(obj.filename,'noise')
             
+            % Define ranges for individual movies
+            obj.ranges = 1:obj.stimTime*refreshRate:obj.totalTime*60*refreshRate;
             obj.counter = 0;
-            obj.order = 1:size(obj.imageData,4);
+            obj.order = 1:length(obj.ranges);
         end
             
         function prepareEpoch(obj, epoch)
@@ -95,7 +98,9 @@ classdef whiteNoiseMovie < edu.washington.riekelab.protocols.RiekeLabStageProtoc
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            epoch.addParameter('imageMatrix',squeeze(obj.imageData{obj.order(obj.counter+1),1}));
+            
+            % Frames displayed
+            epoch.addParameter('range',[obj.ranges(obj.order(obj.counter+1)), obj.ranges(obj.order(obj.counter+2))]);
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -108,37 +113,54 @@ classdef whiteNoiseMovie < edu.washington.riekelab.protocols.RiekeLabStageProtoc
             
             % Stage presets
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();     
-            p = stage.core.Presentation((obj.preTime + obj.stimTime*60*1000 + obj.tailTime) * 1e-3);
+            p = stage.core.Presentation((obj.preTime + obj.tailTime) * 1e-3 + obj.stimTime);
 
             % Set image
             p.setBackgroundColor(obj.backgroundIntensity) % Set background intensity
-            imageMatrix = obj.imageData{obj.order(obj.counter+1),1};
             
-            % Prep to display image
-            scene = edu.washington.riekelab.freedland.stage.Movie(imageMatrix);
+            % Define frames to show
+            individualMovie = obj.movieMatrix(:,:,1,...
+                obj.ranges(obj.order(obj.counter+1)):obj.ranges(obj.order(obj.counter+2)));
+            
+            % Scale to monitor
+            individualMovie = imresize(individualMovie,[canvasSize(2) canvasSize(1)],'nearest');
+            
+            % Add null frames
+            preFrames = round(obj.preTime / 1000 * obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
+            postFrames = round(obj.tailTime / 1000 * obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
+            nullFrame = ones(size(individualMovie,1),size(individualMovie,2)) .* obj.backgroundIntensity .* 255;
+            individualMovie = uint8(cat(4,repmat(nullFrame,1,1,1,preFrames),...
+                individualMovie,repmat(nullFrame,1,1,1,postFrames)));
+            
+            % Export as .mp4 for stage.
+            v = VideoWriter(obj.filename,'MPEG-4');
+            v.FrameRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
+            open(v)
+            for b = 1:size(individualMovie,4)
+                writeVideo(v,individualMovie(:,:,:,b))
+            end
+            
+            % Prep to display movie
+            scene = stage.builtin.stimuli.Movie('Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/whiteNoise.mp4');
             scene.size = canvasSize;
             p0 = canvasSize/2;
             scene.position = p0;
             
-            % Use linear interpolation when scaling the image
+            % Use linear interpolation when scaling the image (for small
+            % changes)
             scene.setMinFunction(GL.LINEAR);
             scene.setMagFunction(GL.LINEAR);
-
-            % Only allow image to be visible during specific time
+            
             p.addStimulus(scene);
-            sceneVisible = stage.builtin.controllers.PropertyController(scene, 'visible', ...
-                @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
-            p.addController(sceneVisible);
-
             obj.counter = mod(obj.counter + 1,length(obj.order));
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages * length(obj.order);
+            tf = obj.numEpochsPrepared < length(obj.order);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages * length(obj.order);
+            tf = obj.numEpochsCompleted < length(obj.order);
         end
     end
 end

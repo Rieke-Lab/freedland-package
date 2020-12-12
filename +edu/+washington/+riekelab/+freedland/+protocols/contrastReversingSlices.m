@@ -9,7 +9,7 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
 
         % Disk sizing and properties
         centerRadius        = 100 % in um
-        centerCuts          = 2:2:20 % slices each radial disk into X quadrants
+        centerCuts          = 2:2:16 % slices each radial disk into X quadrants
         contrast            = 0.9 % 0 to 1
         temporalFrequency   = 4 % Hz
         
@@ -18,7 +18,7 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
         backgroundIntensity = 0.168 % (0-1)
         rotate              = 0; % Amount to rotate all disks
         onlineAnalysis      = 'extracellular'
-        numberOfAverages    = uint16(3) % number of epochs to queue
+        numberOfAverages    = uint16(1) % number of epochs to queue
         amp % Output amplifier
     end
 
@@ -26,6 +26,8 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         disks
+        counter
+        order
     end
 
     methods
@@ -112,6 +114,7 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
             
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
+            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
             
             specificDisks = cat(3,obj.disks{obj.order(obj.counter+1),1},obj.disks{obj.order(obj.counter+1),2});
             
@@ -123,7 +126,6 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
                 grate.spatialFreq = 1 / max(canvasSize * 4); % x2 for diameter, x2 for grating
                 grate.color     = 2 * obj.backgroundIntensity; % Amplitude of square wave
                 grate.contrast  = obj.contrast; % Multiplier on square wave
-                
                 grateShape      = uint8(specificDisks(:,:,a)*255);
                 grateMask       = stage.core.Mask(grateShape);
                 grate.setMask(grateMask);
@@ -137,6 +139,7 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
 
                 p.addStimulus(grate); % Add grating to the presentation
 
+                % Control contrast
                 grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
                     @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
                 p.addController(grateContrast); % Add the controller
@@ -145,21 +148,22 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
                 grateVisible = stage.builtin.controllers.PropertyController(grate, 'visible', ...
                     @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
                 p.addController(grateVisible);
+                
             end
+            obj.counter = mod(obj.counter + 1,length(obj.centerCuts));
             
             function c = getGrateContrast(obj, time)
                 c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * time);
             end
-            obj.counter = obj.counter + 1;
         end
         
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < length(obj.sequence);
+            tf = obj.numEpochsPrepared < length(obj.order) .* obj.numberOfAverages;
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < length(obj.sequence);
-        end
+            tf = obj.numEpochsCompleted < length(obj.order) .* obj.numberOfAverages;
+        end 
         
     end
     

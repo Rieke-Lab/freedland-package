@@ -23,7 +23,7 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
     
     methods
         
-        function obj = contrastDiskSizingFigure(ampDevice, varargin)
+        function obj = contrastReversingFigure(ampDevice, varargin)
             obj.ampDevice = ampDevice;            
             ip = inputParser();
             ip.addParameter('preTime', [], @(x)isvector(x));

@@ -94,7 +94,7 @@ classdef whiteNoiseMovie < edu.washington.riekelab.protocols.RiekeLabStageProtoc
         function prepareEpoch(obj, epoch)
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             device = obj.rig.getDevice(obj.amp);
-            duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
+            duration = (obj.preTime + obj.tailTime) / 1e3 + obj.stimTime;
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);

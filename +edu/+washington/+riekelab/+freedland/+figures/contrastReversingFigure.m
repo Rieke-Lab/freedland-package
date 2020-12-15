@@ -7,6 +7,7 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
         preTime
         stimTime
         temporalFrequency
+        monitorSampleRate
     end
     
     properties (Access = private)
@@ -29,10 +30,12 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
             ip.addParameter('preTime', [], @(x)isvector(x));
             ip.addParameter('stimTime', [], @(x)isvector(x));
             ip.addParameter('temporalFrequency', [], @(x)isvector(x));
+            ip.addParameter('monitorSampleRate', [], @(x)isvector(x));
             ip.parse(varargin{:});
             obj.preTime = ip.Results.preTime;
             obj.stimTime = ip.Results.stimTime;
             obj.temporalFrequency = ip.Results.temporalFrequency;
+            obj.monitorSampleRate = ip.Results.monitorSampleRate;
             
             obj.createUi();
         end
@@ -68,29 +71,30 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
             % Define experiment parameters
             prePts  = sampleRate*obj.preTime/1000;
             stimPts = sampleRate*obj.stimTime/1000;
-            iterations      = obj.stimTime/1000 .* obj.temporalFrequency;
-            iterationPts    = stimPts / iterations; % Each cycle
-            halfway = round(iterationPts / 2);
             
             % Isolate spikes during stimTime
             epochResponseTrace = epochResponseTrace(prePts:(prePts+stimPts));
             S = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(epochResponseTrace);
+            
+            % Reinsert into binary vector
+            epochResponseTrace = zeros(1,prePts:(prePts+stimPts));
+            epochResponseTrace(S.sp) = 1;
 
-            % Identify phase-specific spikes
-            newEpochResponse = zeros(iterations,2);
-            for a = 1:iterations
-                firstPt = ((a - 1) * iterationPts) + 1;
-                newEpochResponse(a,1) = sum(S.sp > firstPt & S.sp < (firstPt + halfway));
-                newEpochResponse(a,2) = sum(S.sp > (firstPt + halfway) & S.sp < (firstPt + iterationPts));
-            end
-
-            newEpochResponse = nanmean(newEpochResponse,1); % Average over cycle
+            % Courtesy of M. Turner.
+            L = length(epochResponseTrace); %length of signal, datapoints
+            X = abs(fft(epochResponseTrace));
+            X = X(1:L/2);
+            f = obj.monitorSampleRate*(0:L/2-1)/L; %freq - hz
+            [~, F1ind] = min(abs(f-obj.temporalFrequency)); %find index of F1 and F2 frequencies
+            [~, F2ind] = min(abs(f-2*obj.temporalFrequency));
+            F1 = 2*X(F1ind); %pA^2/Hz for current rec, (spikes/sec)^2/Hz for spike rate
+            F2 = 2*X(F2ind); %double b/c of symmetry about zero
             
             % Pull associated parameter
             currentSpotSize = epoch.parameters('slices');
             obj.allSpotSizes = cat(1,obj.allSpotSizes,currentSpotSize);
-            obj.allFirstPeriod = cat(1,obj.allFirstPeriod,newEpochResponse(1));
-            obj.allSecondPeriod = cat(1,obj.allSecondPeriod,newEpochResponse(2));
+            obj.allFirstPeriod = cat(1,obj.allFirstPeriod,F1);
+            obj.allSecondPeriod = cat(1,obj.allSecondPeriod,F2);
             
             obj.summaryData.spotSizes = unique(obj.allSpotSizes);
             obj.summaryData.meanResponses = zeros(size(obj.summaryData.spotSizes));

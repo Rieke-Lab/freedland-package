@@ -47,7 +47,8 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             obj.showFigure('edu.washington.riekelab.freedland.figures.contrastReversingFigure',...
                 obj.rig.getDevice(obj.amp),'temporalFrequency',obj.temporalFrequency,...
-                'preTime',obj.preTime,'stimTime',obj.stimTime);
+                'preTime',obj.preTime,'stimTime',obj.stimTime,'monitorSampleRate',...
+                obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
             
             % Convert units
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();

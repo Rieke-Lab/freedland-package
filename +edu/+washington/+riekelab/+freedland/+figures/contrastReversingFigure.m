@@ -8,6 +8,7 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
         stimTime
         temporalFrequency
         monitorSampleRate
+        type
     end
     
     properties (Access = private)
@@ -19,6 +20,7 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
         allSecondPeriod
         baselines
         allSpotSizes
+        secondaryData
         summaryData
     end
     
@@ -31,11 +33,13 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
             ip.addParameter('stimTime', [], @(x)isvector(x));
             ip.addParameter('temporalFrequency', [], @(x)isvector(x));
             ip.addParameter('monitorSampleRate', [], @(x)isvector(x));
+            ip.addParameter('type', []);
             ip.parse(varargin{:});
             obj.preTime = ip.Results.preTime;
             obj.stimTime = ip.Results.stimTime;
             obj.temporalFrequency = ip.Results.temporalFrequency;
             obj.monitorSampleRate = ip.Results.monitorSampleRate;
+            obj.monitorSampleRate = ip.Results.type;
             
             obj.createUi();
         end
@@ -91,7 +95,14 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
             F2 = 2*X(F2ind); %double b/c of symmetry about zero
             
             % Pull associated parameter
-            currentSpotSize = epoch.parameters('slices');
+            if strcmp(obj.type,'slices')
+                currentSpotSize = epoch.parameters('slices');
+            elseif strcmp(obj.type,'subunits')
+                currentSpotSize = epoch.parameters('pixelCoordinates');
+                currentSpotSize = sqrt(sum(currentSpotSize.^2));
+                obj.secondaryData = cat(1,obj.secondaryData,...
+                    [epoch.parameters('pixelCoordinates'), F1, F2]);
+            end
             obj.allSpotSizes = cat(1,obj.allSpotSizes,currentSpotSize);
             obj.allFirstPeriod = cat(1,obj.allFirstPeriod,F1);
             obj.allSecondPeriod = cat(1,obj.allSecondPeriod,F2);

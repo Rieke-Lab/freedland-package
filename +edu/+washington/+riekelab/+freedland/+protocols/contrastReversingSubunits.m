@@ -54,7 +54,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 'type','subunits');
             
             % Convert units
-            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
+            canvasSize = fliplr(obj.rig.getDevice('Stage').getCanvasSize());
             centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...

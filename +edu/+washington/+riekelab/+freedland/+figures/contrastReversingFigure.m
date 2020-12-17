@@ -39,7 +39,7 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
             obj.stimTime = ip.Results.stimTime;
             obj.temporalFrequency = ip.Results.temporalFrequency;
             obj.monitorSampleRate = ip.Results.monitorSampleRate;
-            obj.monitorSampleRate = ip.Results.type;
+            obj.type = ip.Results.type;
             
             obj.createUi();
         end
@@ -55,7 +55,8 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
                 'FontSize', get(obj.figureHandle, 'DefaultUicontrolFontSize'), ...
                 'XTickMode', 'auto');
             xlabel(obj.axesHandle, 'divisions');
-            ylabel(obj.axesHandle, 'total spikes');
+            ylabel(obj.axesHandle, 'amplitude');
+            legend(obj.axesHandle,{'F1','F2'});
             
             intersectionButton = uipushtool( ...
                 'Parent', toolbar, ...
@@ -66,7 +67,7 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
         end
 
         function handleEpoch(obj, epoch)
-            
+
             % Load amp data
             response            = epoch.getResponse(obj.ampDevice);
             epochResponseTrace  = response.getData();
@@ -81,7 +82,7 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
             S = edu.washington.riekelab.freedland.utils.spikeDetectorOnline(epochResponseTrace);
             
             % Reinsert into binary vector
-            epochResponseTrace = zeros(1,prePts:(prePts+stimPts));
+            epochResponseTrace = zeros(1,stimPts);
             epochResponseTrace(S.sp) = 1;
 
             % Courtesy of M. Turner.
@@ -114,18 +115,19 @@ classdef contrastReversingFigure < symphonyui.core.FigureHandler
                 obj.summaryData.meanResponsesFirst(SpotSizeIndex) = mean(obj.allFirstPeriod(pullIndices));
                 obj.summaryData.meanResponsesSecond(SpotSizeIndex) = mean(obj.allSecondPeriod(pullIndices));
             end
-            
+
             if isempty(obj.lineHandle)
                 obj.lineHandle = line(obj.summaryData.spotSizes, obj.summaryData.meanResponsesFirst,...
-                    'Parent', obj.axesHandle,'Color','r','Marker','o');
+                    'Parent', obj.axesHandle,'Color','g','Marker','o','LineWidth',2);
                 obj.lineHandle2 = line(obj.summaryData.spotSizes, obj.summaryData.meanResponsesSecond,...
-                    'Parent', obj.axesHandle,'Color','b','Marker','o');
+                    'Parent', obj.axesHandle,'Color','r','Marker','o','LineWidth',2);
             else
                 set(obj.lineHandle, 'XData', obj.summaryData.spotSizes,...
                     'YData', obj.summaryData.meanResponsesFirst);
                 set(obj.lineHandle2, 'XData', obj.summaryData.spotSizes,...
                     'YData', obj.summaryData.meanResponsesSecond);
             end
+            legend(obj.axesHandle,{'F1','F2'});
         end
         
     end

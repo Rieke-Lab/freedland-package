@@ -119,11 +119,11 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
             
             specificDisks = cat(3,obj.disks{obj.order(obj.counter+1),1},obj.disks{obj.order(obj.counter+1),2});
-            
+
             % Add contrast reversing gratings
             for a = 1:2
                 grate           = stage.builtin.stimuli.Grating('square'); % Square wave grating
-                grate.size      = [canvasSize(2) canvasSize(1)];
+                grate.size      = canvasSize;
                 grate.position  = canvasSize / 2;
                 grate.spatialFreq = 1 / max(canvasSize * 4); % x2 for diameter, x2 for grating
                 grate.color     = 2 * obj.backgroundIntensity; % Amplitude of square wave
@@ -140,7 +140,7 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
                 end
 
                 p.addStimulus(grate); % Add grating to the presentation
-
+                
                 % Control contrast
                 grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
                     @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
@@ -150,10 +150,9 @@ classdef contrastReversingSlices < edu.washington.riekelab.protocols.RiekeLabSta
                 grateVisible = stage.builtin.controllers.PropertyController(grate, 'visible', ...
                     @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
                 p.addController(grateVisible);
-                
             end
             obj.counter = mod(obj.counter + 1,length(obj.centerCuts));
-            
+
             function c = getGrateContrast(obj, time)
                 c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * time);
             end

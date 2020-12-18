@@ -64,11 +64,12 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             [xx,yy] = meshgrid(1:canvasSize(2),1:canvasSize(1));
             r = sqrt((xx - canvasSize(2)/2).^2 + (yy - canvasSize(1)/2).^2); 
             obj.centerDisk = r < centerRadiusPix;
+            obj.opposingDisk = r < subunitRadiusPix;
        
             % Tile subunit locations
             radialDistance = 2 * subunitRadiusPix * (1-obj.samplingOverlap); % Euclidean distance
             radialCoordinates = 0:radialDistance:centerRadiusPix; % All possible radii
-            obj.opposingDisk = zeros([size(r),1000]);
+            obj.opposingDisk = cell(1000,1);
             obj.coordinates = zeros(1000,2);
             tempCounter = 1;
             for a = 1:length(radialCoordinates)
@@ -82,23 +83,23 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                     
                     % Make mask
                     r_subunit = sqrt((xx - obj.coordinates(tempCounter,1)).^2 + (yy - obj.coordinates(tempCounter,2)).^2) <= subunitRadiusPix; 
-                    obj.opposingDisk(:,:,tempCounter) = r_subunit;
+                    obj.opposingDisk{tempCounter,1} = r_subunit;
                     tempCounter = tempCounter + 1;
                 end
             end
             
             % Remove zeros
-            obj.opposingDisk(:,:,sum(obj.coordinates,2) == 0) = [];
+            obj.opposingDisk(sum(obj.coordinates,2) == 0,:) = [];
             obj.coordinates(sum(obj.coordinates,2) == 0,:) = [];
-            
+
             % Check uniqueness
             [obj.coordinates,adj] = unique(obj.coordinates,'rows','stable');
-            obj.opposingDisk = obj.opposingDisk(:,:,adj);
+            obj.opposingDisk = obj.opposingDisk(adj,:);
             
             % Estimate stimulus time
-            disp(strcat('Unique locations to probe: ',mat2str(size(obj.opposingDisk,3))));
+            disp(strcat('Unique locations to probe: ',mat2str(size(obj.opposingDisk,1))));
             expectedTime = (obj.preTime + obj.stimTime + obj.tailTime + 1.5*1000) / (1000*60); % in min
-            disp(strcat('Approx. stimulus time: ',mat2str(round(size(obj.opposingDisk,3)*expectedTime)),'min'));
+            disp(strcat('Approx. stimulus time: ',mat2str(round(size(obj.opposingDisk,1)*expectedTime)),'min'));
 
             obj.counter = 0;
             if obj.randomize == true
@@ -109,13 +110,14 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         end
         
         function prepareEpoch(obj, epoch)
+
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             device = obj.rig.getDevice(obj.amp);
             duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            epoch.addParameter('pixelCoordinates',obj.coordinates(obj.order(obj.counter+1),:));
+            epoch.addParameter('pixelCoordinates',round(obj.coordinates(obj.order(obj.counter+1),:)));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -130,7 +132,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
 
-            specificDisks = cat(3,obj.centerDisk,obj.opposingDisk(:,:,obj.order(obj.counter+1)));
+            specificDisks = cat(3,obj.centerDisk,obj.opposingDisk{obj.order(obj.counter+1),1});
 
             % Add contrast reversing gratings
             for a = 1:2
@@ -156,12 +158,12 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 % Control contrast
                 grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
                     @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
-%                 p.addController(grateContrast); % Add the controller
+                p.addController(grateContrast); % Add the controller
                 
                 % Hide during pre & post
                 grateVisible = stage.builtin.controllers.PropertyController(grate, 'visible', ...
                     @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
-%                 p.addController(grateVisible);
+                p.addController(grateVisible);
             end
             obj.counter = mod(obj.counter + 1,length(obj.order));
 

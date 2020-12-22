@@ -24,7 +24,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(3) % number of epochs to queue
+        numberOfAverages = uint16(1) % number of epochs to queue
         amp % Output amplifier
     end
     

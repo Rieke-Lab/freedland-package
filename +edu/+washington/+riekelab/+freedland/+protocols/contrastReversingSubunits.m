@@ -10,7 +10,8 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         % Disk sizing and properties
         centerRadius        = 100 % in um
         subunitRadius       = 20 % in um
-        contrast            = 0.9 % 0 to 1
+        primaryContrast     = 0.2 % contrast of center, 0 to 1
+        dotContrast         = 0.9 % contrast of subunit-searching dot, 0 to 1
         temporalFrequency   = 4 % Hz
         
         % Additional options
@@ -27,7 +28,8 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         centerDisk
         opposingDisk
-        coordinates
+        cartesianCoordinates
+        polarCoordinates
         counter
         order
     end
@@ -46,12 +48,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
-                obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
-            obj.showFigure('edu.washington.riekelab.freedland.figures.contrastReversingFigure',...
-                obj.rig.getDevice(obj.amp),'temporalFrequency',obj.temporalFrequency,...
-                'preTime',obj.preTime,'stimTime',obj.stimTime,'monitorSampleRate',...
-                obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
-                'type','subunits');
+                obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'))
             
             % Convert units
             canvasSize = fliplr(obj.rig.getDevice('Stage').getCanvasSize());
@@ -59,6 +56,13 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.subunitRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
+            
+            % Graphical figure
+            obj.showFigure('edu.washington.riekelab.freedland.figures.contrastReversingSubunitsFigure',...
+                obj.rig.getDevice(obj.amp),'temporalFrequency',obj.temporalFrequency,...
+                'preTime',obj.preTime,'stimTime',obj.stimTime,...
+                'monitorSampleRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
+                'centerRadius',centerRadiusPix,'subunitRadius',subunitRadiusPix);
             
             %%% Create pixel space
             [xx,yy] = meshgrid(1:canvasSize(2),1:canvasSize(1));
@@ -70,42 +74,46 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             radialDistance = 2 * subunitRadiusPix * (1-obj.samplingOverlap); % Euclidean distance
             radialCoordinates = 0:radialDistance:centerRadiusPix; % All possible radii
             obj.opposingDisk = cell(1000,1);
-            obj.coordinates = zeros(1000,2);
+            obj.cartesianCoordinates = zeros(1000,2);
+            obj.polarCoordinates = zeros(1000,2);
             tempCounter = 1;
             for a = 1:length(radialCoordinates)
                 side = radialCoordinates(a)/radialDistance; % Relative distance from center
                 angleSweep = acos(((side)^2 + (side).^2 - 1) / (2*side^2)); % Law of cosines
                 angleCoordinates = 0:angleSweep:2*pi; % All possible angles
                 for b = 1:length(angleCoordinates)
-                    % Convert to cartesian coordinates
-                    obj.coordinates(tempCounter,1) = canvasSize(2)/2 - radialCoordinates(a) .* cos(angleCoordinates(b));
-                    obj.coordinates(tempCounter,2) = canvasSize(1)/2 - radialCoordinates(a) .* sin(angleCoordinates(b));
+                    % Identify coordinates
+                    obj.polarCoordinates(tempCounter,:) = [radialCoordinates(a) rad2deg(angleCoordinates(b))];
+                    obj.cartesianCoordinates(tempCounter,1) = canvasSize(2)/2 + radialCoordinates(a) .* cos(angleCoordinates(b)); % x
+                    obj.cartesianCoordinates(tempCounter,2) = canvasSize(1)/2 + radialCoordinates(a) .* sin(angleCoordinates(b)); % y
                     
                     % Make mask
-                    r_subunit = sqrt((xx - obj.coordinates(tempCounter,1)).^2 + (yy - obj.coordinates(tempCounter,2)).^2) <= subunitRadiusPix; 
+                    r_subunit = sqrt((xx - obj.cartesianCoordinates(tempCounter,1)).^2 + (yy - obj.cartesianCoordinates(tempCounter,2)).^2) <= subunitRadiusPix; 
                     obj.opposingDisk{tempCounter,1} = r_subunit;
                     tempCounter = tempCounter + 1;
                 end
             end
             
             % Remove zeros
-            obj.opposingDisk(sum(obj.coordinates,2) == 0,:) = [];
-            obj.coordinates(sum(obj.coordinates,2) == 0,:) = [];
+            obj.opposingDisk(sum(obj.cartesianCoordinates,2) == 0,:) = [];
+            obj.polarCoordinates(sum(obj.cartesianCoordinates,2) == 0,:) = [];
+            obj.cartesianCoordinates(sum(obj.cartesianCoordinates,2) == 0,:) = [];
 
             % Check uniqueness
-            [obj.coordinates,adj] = unique(obj.coordinates,'rows','stable');
+            [obj.cartesianCoordinates,adj] = unique(obj.cartesianCoordinates,'rows','stable');
+            obj.polarCoordinates = obj.polarCoordinates(adj,:);
             obj.opposingDisk = obj.opposingDisk(adj,:);
             
             % Estimate stimulus time
             disp(strcat('Unique locations to probe: ',mat2str(size(obj.opposingDisk,1))));
-            expectedTime = (obj.preTime + obj.stimTime + obj.tailTime + 1.5*1000) / (1000*60); % in min
-            disp(strcat('Approx. stimulus time: ',mat2str(round(size(obj.opposingDisk,1)*expectedTime)),'min'));
+            expectedTime = (obj.preTime + obj.stimTime + obj.tailTime + 1.5*1000) / (1000*60); % +1.5 sec rig delay, in min
+            disp(strcat('Approx. stimulus time: ',mat2str(round(size(obj.opposingDisk,1)*expectedTime*obj.numberOfAverages)),'min'));
 
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(size(obj.coordinates,1));
+                obj.order = randperm(size(obj.cartesianCoordinates,1));
             else
-                obj.order = 1:size(obj.coordinates,1);
+                obj.order = 1:size(obj.cartesianCoordinates,1);
             end
         end
         
@@ -117,7 +125,8 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            epoch.addParameter('pixelCoordinates',round(obj.coordinates(obj.order(obj.counter+1),:)));
+            epoch.addParameter('pixelCoordinates_cartesianPx',round(obj.cartesianCoordinates(obj.order(obj.counter+1),:)));
+            epoch.addParameter('pixelCoordinates_polarPx',round(obj.polarCoordinates(obj.order(obj.counter+1),:)));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -141,7 +150,6 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 grate.position  = canvasSize / 2;
                 grate.spatialFreq = 1 / max(canvasSize * 4); % x2 for diameter, x2 for grating
                 grate.color     = 2 * obj.backgroundIntensity; % Amplitude of square wave
-                grate.contrast  = obj.contrast; % Multiplier on square wave
                 grateShape      = uint8(specificDisks(:,:,a)*255);
                 grateMask       = stage.core.Mask(grateShape);
                 grate.setMask(grateMask);
@@ -149,15 +157,17 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 % Contrasting gratings between each set of masks
                 if a == 1
                     grate.phase = 180;
+                    grate.contrast  = obj.primaryContrast; % Multiplier on square wave
                 else
                     grate.phase = 0;
+                    grate.contrast  = obj.dotContrast; % Multiplier on square wave
                 end
 
                 p.addStimulus(grate); % Add grating to the presentation
 
                 % Control contrast
                 grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
-                    @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
+                    @(state)getGrateContrast(obj, grate.contrast, state.time - obj.preTime/1e3));
                 p.addController(grateContrast); % Add the controller
                 
                 % Hide during pre & post
@@ -167,8 +177,8 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             end
             obj.counter = mod(obj.counter + 1,length(obj.order));
 
-            function c = getGrateContrast(obj, time)
-                c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * time);
+            function c = getGrateContrast(obj, specificContrast, time)
+                c = specificContrast.*sin(2 * pi * obj.temporalFrequency * time);
             end
         end
         

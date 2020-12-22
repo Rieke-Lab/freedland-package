@@ -9,6 +9,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
         randomize = true; % whether to randomize movies shown
         rawMovieFrequency = 3; % How often should we show the original movie amongst experimental movies? (i.e, 3 = every 3 experimental movies, we show 1 raw movie).
+        backgroundIntensity = 0.168; % 0 - 1
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -19,7 +20,6 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        backgroundIntensity
         sequence
         counter
         imageMatrix
@@ -82,20 +82,11 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     obj.movieFilenames = [obj.movieFilenames; {rawMovies{rawMovieCounter+1,1}}];
                     rawMovieCounter = mod(rawMovieCounter + 1,size(rawMovies,1));
                 end
-                
                 obj.movieFilenames = [obj.movieFilenames; {testMovies{a,1}}];
                 frequencyCheck = mod(frequencyCheck + 1,obj.rawMovieFrequency);
             end
             
-            % Find background intensity
-            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(81, 1,...
-                    'amplification', 1,'mirroring', false);
-            img = pictureInformation.image;
-            img = (img./max(max(img)));
-            obj.backgroundIntensity = mean(img(:));
-            
             obj.sequence = repmat(1:size(obj.movieFilenames,1),1,obj.numberOfAverages);
-            
             if obj.randomize == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
@@ -103,13 +94,11 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             % For identifying a good empirical rawMovieFrequency
             movieTimings(obj);
-        
         end
         
         function prepareEpoch(obj, epoch)
             
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
-            
             device = obj.rig.getDevice(obj.amp);
             duration = 6;
             
@@ -166,7 +155,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             D = strcat('Average time between raw movies:',mat2str(round(mean(C),2)),'minutes.');
             disp(D)
             
-            D = strcat('Approx. total stimulus time (+33% rig delay):',mat2str(length(obj.sequence)* videoLength /60 * 1.33),'minutes.');
+            D = strcat('Approx. total stimulus time (+1.5 sec rig delay):',mat2str(length(obj.sequence) * (videoLength+1.5)/60),'minutes.');
             disp(D)
         end
 

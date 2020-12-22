@@ -8,12 +8,12 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         tailTime = 250 % in ms
         
         % Natural image
-        imageNo = 81; % natural image number (1 to 101), as a vector.
+        imageNo = 81;   % natural image number (1 to 101), as a vector.
         observerNo = 1; % observer number (1 to 19). Can be a single value or vector.
-        frame = 200; % frame # according to DOVES database. Typically between 1 and 1000.
+        frame = 200;    % frame # according to DOVES database. Typically between 1 and 1000.
         
         % Rotation characteristics
-        stepRotation = 30; % degrees to rotate each cycle
+        stepRotation = 15; % degrees to rotate in each epoch
         maskRadius = 100;  % in um. Places mask over surrounding portion of image.
         randomize = true;  % randomize each rotation
 
@@ -135,19 +135,18 @@ classdef rotateImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Relevant frame size
             pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(obj.maskRadius,...
                 obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin'));
-
-            [empiricalPath, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(...
+            [path, image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(...
                 obj.imageNo,obj.observerNo);
                 
             % Scale pixels in image to monitor
-            img = pictureInformation.image;
+            img = image;
             img = (img./max(max(img)));  
             obj.backgroundIntensity = mean(img(:));
             img = img.*255;      
                 
             % Pull image
-            imageFrame = img(empiricalPath.y(obj.frame)-pixelRange:empiricalPath.y(obj.frame)+pixelRange,...
-                empiricalPath.x(obj.frame)-pixelRange:empiricalPath.x(obj.frame)+pixelRange);
+            imageFrame = img(path.y(obj.frame)-pixelRange:path.y(obj.frame)+pixelRange,...
+                path.x(obj.frame)-pixelRange:path.x(obj.frame)+pixelRange);
         end
         
         function tf = shouldContinuePreparingEpochs(obj)

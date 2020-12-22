@@ -9,8 +9,9 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
         imageNumber = 5;
         controlVideo = '1A'; % partial string contained in movie file
-        testVideo = '1S-9'; %  partial string contained in movie file
+        testVideo = '1S-6'; %  partial string contained in movie file
         offsets = [0 25 50 75 100 150 200 400]; % offsets (um)
+        offsetDirection = 0; % degrees; 0 = horizontal, 90 = vertical
         randomize = true; % whether to randomize movies shown
 
         % Additional parameters
@@ -83,11 +84,9 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.movieFilenames = repmat([{controlMov};{testMov}],length(obj.offsets),1);
 
             % Find background intensity
-            [~, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(81, 1,...
-                    'amplification', 1,'mirroring', false);
-            img = pictureInformation.image;
-            img = (img./max(max(img)));
-            obj.backgroundIntensity = mean(img(:));
+            [~, image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNumber, 1);
+            image = image./max(image(:));
+            obj.backgroundIntensity = mean(image(:));
             
             obj.offsetsPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.offsets,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
@@ -133,12 +132,16 @@ classdef offsetVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             selection = obj.sequence(obj.counter+1);
             f = obj.movieFilenames{selection,1}; % filename for relevant movie
-
+            
+            xOffset = obj.offsetsPix(obj.counter+1) .* cos(deg2rad(obj.offsetDirection));
+            yOffset = obj.offsetsPix(obj.counter+1) .* sin(deg2rad(obj.offsetDirection));
+            
             % Prep to display image
             scene = stage.builtin.stimuli.Movie(fullfile(obj.directory,f));
-            scene.size = [canvasSize(1),canvasSize(2)];
+            scene.size = canvasSize;
             p0 = canvasSize/2;
-            p0(1) = p0(1) + obj.offsetsPix(obj.counter+1);
+            p0(1) = p0(1) + xOffset; % offset
+            p0(2) = p0(2) + yOffset;
             scene.position = p0;
             
             % Use linear interpolation when scaling the image

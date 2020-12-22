@@ -138,18 +138,14 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             imageFrame = zeros(pixelRange*2+1,pixelRange*2+1,1,length(obj.imageNo));
             for a = 1:length(obj.imageNo)
-                [empiricalPath, ~, ~, pictureInformation] = edu.washington.riekelab.freedland.scripts.pathDOVES(...
-                    obj.imageNo(a),obj.observerNo);
-
-                % Scale pixels in image to monitor
-                img = pictureInformation.image;
-                img = (img./max(max(img)));  
-                obj.backgroundIntensity = mean(img(:));
+                [~, image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNumber, 1);
+                image = image./max(image(:));
+                obj.backgroundIntensity = mean(image(:));
                 img = img.*255;      
 
                 % Pull image
-                imageFrame(:,:,1,a) = img(empiricalPath.y(obj.frame(a))-pixelRange:empiricalPath.y(obj.frame(a))+pixelRange,...
-                    empiricalPath.x(obj.frame(a))-pixelRange:empiricalPath.x(obj.frame(a))+pixelRange);
+                imageFrame(:,:,1,a) = img(path.y(obj.frame(a))-pixelRange:path.y(obj.frame(a))+pixelRange,...
+                    path.x(obj.frame(a))-pixelRange:path.x(obj.frame(a))+pixelRange);
             end
         end
         

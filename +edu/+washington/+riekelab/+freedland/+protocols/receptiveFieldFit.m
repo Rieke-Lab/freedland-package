@@ -2,16 +2,23 @@
 classdef receptiveFieldFit < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
-        preTime = 250 % ms
-        stimTime = 250 % ms
-        tailTime = 250 % ms
+        % Stimulus timing
+        preTime     = 250 % ms
+        stimTime    = 250 % ms
+        tailTime    = 250 % ms
+        
+        % Cell information
         cellClass = 'ON' % type of cell
         centerSigma = [10,20,30,40,50,60,70,80,90,100,110,120] % in um
         annulusSize = [30,40,50,60,70,80,90,100,110,120,130,140,150] % in um
+        
+        % Stimulus information
         backgroundIntensity = 0.168; % maximum light intensity we encounter (0-1)
         centerContrast = 0.5; % 0-1 for spot brightness
-        surroundContrast = 0.5; % 0-1 for spot brightness
+        surroundContrast = 0.5; % 0-1 for surrounding brightness
         disk = 'uniform';
+        
+        % Additional settings
         randomizeOrder = false
         onlineAnalysis = 'none'
         numberOfAverages = uint16(2) % number of epochs to queue

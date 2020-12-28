@@ -1,51 +1,51 @@
 % Load generic settings.
 
-function retinalMetamers = loadSettings(umPerPixel,canvasSize,frameRate,centerSigma,surroundSigma)
+function settings = loadSettings(umPerPixel,canvasSize,frameRate,centerSigma,surroundSigma)
 
     % Cell information
-    retinalMetamers.rfSigmaCenter       = centerSigma;   % in microns
-    retinalMetamers.rfSigmaSurround     = surroundSigma; % in microns
+    settings.rfSigmaCenter       = centerSigma;   % in microns
+    settings.rfSigmaSurround     = surroundSigma; % in microns
     
     % Pixel information
-    retinalMetamers.micronsPerPixel     = umPerPixel; % How many microns each pixel spans
-    retinalMetamers.monitorSize         = fliplr(canvasSize); % Size of monitor [height, width]
-    retinalMetamers.monitorFrameRate    = frameRate;  % Hz
-    retinalMetamers.videoSize = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(retinalMetamers.monitorSize,retinalMetamers.micronsPerPixel,'pix2arcmin');
-    if mod(retinalMetamers.videoSize,2) == 0
-        retinalMetamers.videoSize = retinalMetamers.videoSize + 1; % Ensure is odd (s.t. central pixel exists)
+    settings.micronsPerPixel     = umPerPixel; % How many microns each pixel spans
+    settings.monitorSize         = fliplr(canvasSize); % Size of monitor [height, width]
+    settings.monitorFrameRate    = frameRate;  % Hz
+    settings.videoSize = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(settings.monitorSize,settings.micronsPerPixel,'pix2arcmin');
+    if mod(settings.videoSize,2) == 0
+        settings.videoSize = settings.videoSize + 1; % Ensure is odd (s.t. central pixel exists)
     end
 
     % Calculate the location of disks
-    [~,info] = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(retinalMetamers);
-    retinalMetamers.diskRadii = [0,...                                                % At center of monitor
+    [~,info] = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(settings);
+    settings.diskRadii = [0,...                                                % At center of monitor
         info.percentExcitation(2,(info.percentExcitation(1,:) == 50)),... % At 50% excitation
         info.zeroPt,...                                                   % Where excitatory inputs -> inhibitory
         info.percentInhibition(2,(info.percentInhibition(1,:) == 50)),... % At 50% inhibition
-        max(retinalMetamers.videoSize/2)];                                            % At edge of monitor
-    retinalMetamers.diskRegionUnits = 'arcmin';
+        max(settings.videoSize/2)];                                            % At edge of monitor
+    settings.diskRegionUnits = 'arcmin';
 
     % Stimulus timing
-    retinalMetamers.preTime     = 250;  % (in ms). Presents blank background.
-    retinalMetamers.stimTime    = 5500; % (in ms). Presents main stimulus.
-    retinalMetamers.tailTime    = 250;  % (in ms). Presents blank background.
+    settings.preTime     = 250;  % (in ms). Presents blank background.
+    settings.stimTime    = 5500; % (in ms). Presents main stimulus.
+    settings.tailTime    = 250;  % (in ms). Presents blank background.
     
     %%% All settings
     % DOVES information
-    retinalMetamers.imageNo     = 5; % Individual image to show. (#1 - 101)
-    retinalMetamers.observerNo  = 1; % Individual observer for eye tracking. (#1 - 19)
+    settings.imageNo     = 5; % Individual image to show. (#1 - 101)
+    settings.observerNo  = 1; % Individual observer for eye tracking. (#1 - 19)
     
     % List of all key variables
-    retinalMetamers.experimentName      = 'test';  % ID for corresponding movie (string)
-    retinalMetamers.diskRegions         = []; % Specific radii for placing disks
+    settings.experimentName      = 'test';  % ID for corresponding movie (string)
+    settings.diskRegions         = []; % Specific radii for placing disks
     
     % Different types of disks (see EXAMPLES below)
     % Here, we identify each disk from center outwards as #s 1,2,3,...
-    retinalMetamers.meanDisks           = []; % Replace disk #s with linear equivalent disk.
-    retinalMetamers.backgroundDisks     = []; % Replace disk #s with static disk (average intensity of image) 
-    retinalMetamers.naturalDisks        = []; % Replace disk #s with original image
-    retinalMetamers.switchDisks         = []; % Replace disk #s with flashing region (after each saccade)
-        retinalMetamers.switchContrast  = []; % Intensity of flashing region (0 - 1)
-    retinalMetamers.metamerDisks        = []; % Replace disk #s with another naturalistic image.
+    settings.meanDisks           = []; % Replace disk #s with linear equivalent disk.
+    settings.backgroundDisks     = []; % Replace disk #s with static disk (average intensity of image) 
+    settings.naturalDisks        = []; % Replace disk #s with original image
+    settings.switchDisks         = []; % Replace disk #s with flashing region (after each saccade)
+        settings.switchContrast  = []; % Intensity of flashing region (0 - 1)
+    settings.metamerDisks        = []; % Replace disk #s with another naturalistic image.
 
     %%% EXAMPLES
     %   - Make the center-most disk a linear equivalent disk: 
@@ -59,9 +59,9 @@ function retinalMetamers = loadSettings(umPerPixel,canvasSize,frameRate,centerSi
     %%%
     
     % Slice disks into pie-shaped regions
-    retinalMetamers.slices              = 1;    % How many pie-shaped regions?
-        retinalMetamers.sliceDisks      = [];   % Which disk #s recieve slices?
-        retinalMetamers.sliceRotation   = 0;    % Where to place disks rotationally? (degrees)
+    settings.slices              = 1;    % How many pie-shaped regions?
+        settings.sliceDisks      = [];   % Which disk #s recieve slices?
+        settings.sliceRotation   = 0;    % Where to place disks rotationally? (degrees)
         
     %%% EXAMPLES
     %   - Split center disk into 7 slices
@@ -73,7 +73,7 @@ function retinalMetamers = loadSettings(umPerPixel,canvasSize,frameRate,centerSi
     %       obj.sliceRotation = 30;
     %%%
 
-    retinalMetamers.smoothing           = false; % Whether to smooth edges on final movies 
-    retinalMetamers.numberOfMetamerMovies = 1;   % Number of unique metamers to make
+    settings.smoothing           = false; % Whether to smooth edges on final movies 
+    settings.numberOfMetamerMovies = 1;   % Number of unique metamers to make
     
 end

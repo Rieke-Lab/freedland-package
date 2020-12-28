@@ -58,7 +58,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','regions');
             
             % Convert units
-            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
+            canvasSize = fliplr(obj.rig.getDevice('Stage').getCanvasSize());
             centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             
@@ -198,7 +198,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Prep to display image
             scene = stage.builtin.stimuli.Image(uint8(image.*255));
-            scene.size = [canvasSize(2) canvasSize(1)];
+            scene.size = canvasSize;
             p0 = canvasSize/2;
             scene.position = p0;
             

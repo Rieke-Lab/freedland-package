@@ -15,6 +15,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
     properties (Access = private)
         axesHandle
         summaryData
+        dataTracker
     end
     
     methods
@@ -38,6 +39,20 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             
             obj.createUi();
         end
+        
+        function createUi(obj)
+            import appbox.*;
+
+            iconDir = [fileparts(fileparts(mfilename('fullpath'))), '\+utils\+icons\'];
+            toolbar = findall(obj.figureHandle, 'Type', 'uitoolbar');
+            calculateWeights = uipushtool( ...
+                'Parent', toolbar, ...
+                'TooltipString', 'Export subunits', ...
+                'Separator', 'on', ...
+                'ClickedCallback', @obj.onSelectedExportSubunits);
+            setIconImage(calculateWeights, [iconDir, 'DoG.png']);
+        end
+
 
         function handleEpoch(obj, epoch)
 
@@ -70,23 +85,26 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             
             % Build mask
             currentSpotSize = epoch.parameters('pixelCoordinates_polarPx');
-            xCoord = currentSpotSize(1) .* cos(deg2rad(currentSpotSize(2)));
-            yCoord = currentSpotSize(1) .* sin(deg2rad(currentSpotSize(2)));
-            [xx,yy] = meshgrid(1:obj.centerRadius,1:obj.centerRadius);
+            xCoord = obj.centerRadius + currentSpotSize(1) .* cos(deg2rad(currentSpotSize(2)));
+            yCoord = obj.centerRadius - currentSpotSize(1) .* sin(deg2rad(currentSpotSize(2)));
+            [xx,yy] = meshgrid(1:obj.centerRadius*2,1:obj.centerRadius*2);
             r_subunit = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= obj.subunitRadius;
+            
+            % Save to variable for identification
+            obj.dataTracker = cat(1,obj.dataTracker,[epoch.parameters('pixelCoordinates_polarMicrons'), F1, F2]);
                 
             % First run
             if ~isfield(obj.summaryData,'F1')
-                obj.summaryData.F1 = zeros(obj.centerRadius,obj.centerRadius);
-                obj.summaryData.F2 = zeros(obj.centerRadius,obj.centerRadius);
-                obj.summaryData.ratio = zeros(obj.centerRadius,obj.centerRadius);
-                obj.summaryData.tracker = zeros(obj.centerRadius,obj.centerRadius);
+                obj.summaryData.F1 = zeros(obj.centerRadius*2,obj.centerRadius*2);
+                obj.summaryData.F2 = zeros(obj.centerRadius*2,obj.centerRadius*2);
+                obj.summaryData.ratio = zeros(obj.centerRadius*2,obj.centerRadius*2);
+                obj.summaryData.tracker = zeros(obj.centerRadius*2,obj.centerRadius*2);
             end
             
             % Assign values
             obj.summaryData.tracker = obj.summaryData.tracker + r_subunit;
-            obj.summaryData.F1 = obj.summaryData.F1 + F1 .* r_subunit;
-            obj.summaryData.F2 = obj.summaryData.F2 + F2 .* r_subunit;
+            obj.summaryData.F1 = obj.summaryData.F1 + (F1 .* r_subunit);
+            obj.summaryData.F2 = obj.summaryData.F2 + (F2 .* r_subunit);
             obj.summaryData.ratio = obj.summaryData.ratio + (F2/F1) .* r_subunit;
 
             figure(1)
@@ -99,8 +117,16 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             title('F2')
             
             subplot(1,3,3)
-            imagesc(obj.summaryData.ratio ./ obj.summaryData.tracker);
+            imagesc(obj.summaryData.ratio);
             title('F2/F1')
+        end
+        
+        function onSelectedExportSubunits(obj, ~, ~)
+            % Sort by F2 frequency
+            [~,i] = sort(obj.dataTracker(:,4),'descend');
+            
+            % Export as .txt.
+            dlmwrite(strcat('Documents/subunitLocation_um.txt'),obj.dataTracker(i,:))
         end
     end
 end

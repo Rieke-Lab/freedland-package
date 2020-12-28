@@ -30,6 +30,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         opposingDisk
         cartesianCoordinates
         polarCoordinates
+        polarCoordinates_um
         counter
         order
     end
@@ -83,8 +84,12 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 for b = 1:length(angleCoordinates)
                     % Identify coordinates
                     obj.polarCoordinates(tempCounter,:) = [radialCoordinates(a) rad2deg(angleCoordinates(b))];
+                    obj.polarCoordinates_um(tempCounter,:) = [edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                        radialCoordinates(a),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2um'),...
+                        rad2deg(angleCoordinates(b))];
+                    
                     obj.cartesianCoordinates(tempCounter,1) = canvasSize(2)/2 + radialCoordinates(a) .* cos(angleCoordinates(b)); % x
-                    obj.cartesianCoordinates(tempCounter,2) = canvasSize(1)/2 + radialCoordinates(a) .* sin(angleCoordinates(b)); % y
+                    obj.cartesianCoordinates(tempCounter,2) = canvasSize(1)/2 - radialCoordinates(a) .* sin(angleCoordinates(b)); % y
                     
                     % Make mask
                     r_subunit = sqrt((xx - obj.cartesianCoordinates(tempCounter,1)).^2 + (yy - obj.cartesianCoordinates(tempCounter,2)).^2) <= subunitRadiusPix; 
@@ -125,9 +130,10 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             
-            % Add coordinates (in pixels)
-            epoch.addParameter('pixelCoordinates_cartesianPx',round(obj.cartesianCoordinates(obj.order(obj.counter+1),:)));
-            epoch.addParameter('pixelCoordinates_polarPx',round(obj.polarCoordinates(obj.order(obj.counter+1),:)));
+            % Add coordinates
+            epoch.addParameter('pixelCoordinates_cartesianPx',obj.cartesianCoordinates(obj.order(obj.counter+1),:));
+            epoch.addParameter('pixelCoordinates_polarPx',obj.polarCoordinates(obj.order(obj.counter+1),:));
+            epoch.addParameter('pixelCoordinates_polarMicrons',obj.polarCoordinates_um(obj.order(obj.counter+1),:));
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));

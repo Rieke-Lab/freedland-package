@@ -9,6 +9,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Region of image to be shown
         maskRadius = 100;  % in um. Places mask over surrounding portion of image.
+        region = 'full-field'; % where to display image
         
         % Natural image
         imageNo = [5,5,12,12,71,71,73,73,79,79,81,81,100,100];              % natural image number (1 to 101)
@@ -25,6 +26,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        regionType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only', 'full-field'}) 
         backgroundIntensity
         imageDatabase
         counter
@@ -113,38 +115,43 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
             
-            % Add mask
+            % Create aperature
             aperatureDiameter = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.maskRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix') .* 2);
+            aperture = stage.builtin.stimuli.Rectangle();
+            aperture.position = canvasSize/2;
+            aperture.color = obj.backgroundIntensity;
+            aperture.size = [max(canvasSize) max(canvasSize)];
             
-            if (aperatureDiameter > 0) %% Create aperture
-                aperture = stage.builtin.stimuli.Rectangle();
-                aperture.position = canvasSize/2;
-                aperture.color = obj.backgroundIntensity;
-                aperture.size = [max(canvasSize) max(canvasSize)];
-                mask = stage.core.Mask.createCircularAperture(aperatureDiameter/max(canvasSize), 1024); %circular aperture
-                aperture.setMask(mask);
-                p.addStimulus(aperture); %add aperture
+            if strcmp(obj.region,'center-only') %% Create aperture
+                mask = stage.core.Mask.createCircularAperture(aperatureDiameter/max(canvasSize), 1024);
+            elseif strcmp(obj.region,'surround-only')
+                mask = stage.core.Mask.createAnnulus(0,aperatureDiameter/max(canvasSize), 1024);
+            elseif strcmp(obj.region,'full-field')
+                mask = stage.core.Mask.createCircularAperture(1, 1024);
             end
             
+            aperture.setMask(mask);
+            p.addStimulus(aperture);
             obj.counter = mod(obj.counter + 1,length(obj.order));
         end
         
         function imageFrame = findImage(obj)
             
             % Relevant frame size
-            pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(obj.maskRadius,...
-                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin'));
+            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();   
+            pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(max(canvasSize),...
+                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2arcmin'));
 
             imageFrame = zeros(pixelRange*2+1,pixelRange*2+1,1,length(obj.imageNo));
             for a = 1:length(obj.imageNo)
-                [~, image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNumber, 1);
+                [path, image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNo(a), 1);
                 image = image./max(image(:));
                 obj.backgroundIntensity = mean(image(:));
-                img = img.*255;      
+                image = image.*255;      
 
                 % Pull image
-                imageFrame(:,:,1,a) = img(path.y(obj.frame(a))-pixelRange:path.y(obj.frame(a))+pixelRange,...
+                imageFrame(:,:,1,a) = image(path.y(obj.frame(a))-pixelRange:path.y(obj.frame(a))+pixelRange,...
                     path.x(obj.frame(a))-pixelRange:path.x(obj.frame(a))+pixelRange);
             end
         end

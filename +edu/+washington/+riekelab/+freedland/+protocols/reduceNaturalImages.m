@@ -12,14 +12,15 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
         
         % Subunit information
-        subunitLocation_r       = [0 10 20 30];  % grid of subunits (in radial coordinates: r, in microns)
-        subunitLocation_theta   = [0 180 0 180]; % grid of subunits (in radial coordinates: theta, in degrees)
-        subunitRadius           = 40;            % in microns
+        subunitDiameter         = 40;            % in microns
+        subunitLocation_radial  = [25 50 75];  % grid of subunits (in radial coordinates: r, in microns)
+        subunitLocation_theta   = [0 120 240]; % grid of subunits (in radial coordinates: theta, in degrees)
         
         % Natural image information
         imageNo = 5;                % natural image to reduce (1 - 101)
         observerNo = 1;             % different observer's eye trajectory (1 - 19)
         showNaturalMovie = true;    % show natural image movie prior to reduced movie
+        naturalMovieRegion = 'center-only'; % which region of natural image movie to show.
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -30,8 +31,10 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        naturalMovieRegionType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only', 'full-field'}) 
         backgroundIntensity
-        movieExport
+        directory
+        filename
         counter
         order
     end
@@ -78,18 +81,34 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             [RFFilter,settings.rfSizing] = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(settings);
             
             % Use DOVES eye movements to create movie. Convolve movie with receptive field structure.
-            [convolvedStimulus, obj.movieExport{1,1}] = edu.washington.riekelab.freedland.videoGeneration.utils.weightedTrajectory(settings, img, RFFilter);
+            [convolvedStimulus, rawMov] = edu.washington.riekelab.freedland.videoGeneration.utils.weightedTrajectory(settings, img, RFFilter);
             
             % The DOVES database is in units of arcmin
             subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.subunitRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+                obj.subunitDiameter/2,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
             subunitLocationPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.subunitLocation_r,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+                obj.subunitLocation_radial,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+            
+            % Identify natural image movie region to show.
+            [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
+            m = sqrt((xx - settings.videoSize(2)/2).^2 + (yy - settings.videoSize(1)/2).^2);
+            if strcmp(obj.naturalMovieRegion,'center-only')
+                mask = m <= settings.rfSizing.zeroPt;
+            elseif strcmp(obj.naturalMovieRegion,'surround-only')
+                mask = m >= settings.rfSizing.zeroPt & m < max(settings.diskRadii);
+            elseif strcmp(obj.naturalMovieRegion,'full-field')
+                mask = m < max(settings.diskRadii);
+            end
+            
+            for a = 1:size(rawMov,4)
+                rawMov(:,:,1,a) = rawMov(:,:,1,a) .* mask + ~mask .* obj.backgroundIntensity;
+            end
+            rawMov = rawMov .* 255;
             
             % Build reduced stimulus
-            subunitMasks = zeros([settings.videoSize,length(obj.subunitLocation_r)]);
+            subunitMasks = zeros([settings.videoSize,length(obj.subunitLocation_radial)]);
             reducedStimulus = zeros(size(convolvedStimulus));
-            for a = 1:length(obj.subunitLocation_r)
+            for a = 1:length(obj.subunitLocation_radial)
                 
                 % Build a mask for each subunit
                 xCoord = settings.videoSize(2)/2 + subunitLocationPix(a) .* cos(deg2rad(obj.subunitLocation_theta(a)));
@@ -98,21 +117,49 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 subunitMasks(:,:,a) = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= subunitRadiusPix;
                 
                 % Integrate each frame using linear-equivalent disk
-                normalizingValue = sum(RFFilter .* subunitMasks(:,:,a),[1 2]); % RF * mask
-                for b = 1:size(obj.stimulus.raw,4)
-                    rawValue = sum(convolvedStimulus(:,:,1,b) .* subunitMasks(:,:,a),[1 2]); % RF * image * mask
-                    reducedStimulus(:,:,1,b) = reducedStimulus(:,:,1,b) + subunitMasks(:,:,a) .* (rawValue / normalizingValue);
+                normalizingValue = RFFilter .* subunitMasks(:,:,a);
+                normalizingValue = sum(normalizingValue(:)); % RF * mask
+                for b = 1:size(rawMov,4)
+                    rawValue = convolvedStimulus(:,:,1,b) .* subunitMasks(:,:,a);
+                    rawValue = sum(rawValue(:)); % RF * image * mask
+                    reducedStimulus(:,:,1,b) = reducedStimulus(:,:,1,b) + subunitMasks(:,:,a) .* (rawValue / normalizingValue) .* 255;
                 end
             end
+            reducedMov = reducedStimulus ./ repmat(sum(subunitMasks,3),1,1,1,size(reducedStimulus,4)); % For overlapping subunits: average results
+            reducedMov(isnan(reducedMov)) = obj.backgroundIntensity .* 255;
             
-            % For overlapping subunits: average results
-            obj.movieExport{1,2} = reducedStimulus ./ repmat(sum(subunitMasks,3),1,1,1,size(reducedStimulus,4));
+            %%% Stage cannot retain movie data. Export as .mp4
+            obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
+            obj.filename = [{'natural'};{'reduced'}];
+            
+            % Add pre-time and post-time manually
+            refreshRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
+            blankFrames = ones(size(reducedMov(:,:,1,1))) .* 255 .* obj.backgroundIntensity;
+            preFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.preTime/1e3)));
+            postFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.tailTime/1e3)));
+            rawMov = uint8(cat(4,preFrames,rawMov,postFrames));
+            reducedMov = uint8(cat(4,preFrames,reducedMov,postFrames));
+            
+            % Export as .mp4
+            v = VideoWriter(strcat(obj.directory,obj.filename{1}),'Uncompressed AVI');
+            w = VideoWriter(strcat(obj.directory,obj.filename{2}),'Uncompressed AVI');
+            v.FrameRate = refreshRate;
+            w.FrameRate = refreshRate;
+            open(v)
+            open(w)
+            for a = 1:size(rawMov,4)
+                writeVideo(v,rawMov(:,:,1,a));
+                writeVideo(w,reducedMov(:,:,1,a));
+            end
+            close(v)
+            close(w)
+            %%%
             
             obj.counter = 0;
             if obj.showNaturalMovie == true
-                obj.order = repmat([1 2],1,length(obj.numberOfAverages));
+                obj.order = repmat(obj.filename,obj.numberOfAverages,1);
             else
-                obj.order = repelem(2,length(obj.numberOfAverages));
+                obj.order = repmat(obj.filename{2},obj.numberOfAverages,1);
             end
         end
         
@@ -125,12 +172,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
-            
-            if obj.order(obj.counter+1) == 1
-                epoch.addParameter('movieType', 'natural');
-            elseif obj.order(obj.counter+1) == 2
-                epoch.addParameter('movieType', 'reduced');
-            end
+            epoch.addParameter('movieType', obj.order{obj.counter+1});
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -143,40 +185,17 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             
             % Stage presets
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); 
-            refreshRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
             p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
-            
-            % Load individual movie
-            individualMovie = obj.movieExport{1,obj.order(obj.counter+1)};
-            
-            % Prep to display image
-            initMatrix = uint8(255 .* obj.backgroundIntensity .* ones(size(obj.stimulus.reduced,1),size(obj.stimulus.reduced,2)));
-            mov = stage.builtin.stimuli.Image(initMatrix); % Starting image (blank)
-            mov.size = canvasSize;
-            mov.position = canvasSize/2;
-            mov.setMinFunction(GL.LINEAR); % Can also use GL.NEAREST for no pixel interpolation
-            mov.setMagFunction(GL.LINEAR);
-            p.addStimulus(mov);
-            
-            % Program each frame
-            preFrames = round(refreshRate * (obj.preTime/1e3));
-            movController = stage.builtin.controllers.PropertyController(mov, 'imageMatrix',...
-                @(state)getMovieFrame(obj, state.frame - preFrames, individualMovie));
-            p.addController(movController);
-            
-            function frame = getMovieFrame(obj, frame, movie)
-                if frame < 0 % Before movie begins
-                    frame = uint8(obj.backgroundIntensity .* 255 .* ones(size(movie,1),size(movie,2)));
-                else
-                    frame = uint8(movie(:,:,1,frame));
-                end
-            end
 
-            % Hide during pre & post
-            movVisible = stage.builtin.controllers.PropertyController(mov, 'visible', ...
-                @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
-            p.addController(movVisible); 
+            % Prep to display image
+            scene = stage.builtin.stimuli.Movie(fullfile(obj.directory,strcat(obj.order{obj.counter+1},'.avi')));
+            scene.size = canvasSize;
+            p0 = canvasSize/2;
+            scene.position = p0;
+            scene.setMinFunction(GL.LINEAR); % Linear scaling to monitor
+            scene.setMagFunction(GL.LINEAR);
+            p.addStimulus(scene);
             
             obj.counter = mod(obj.counter + 1,length(obj.order));
         end

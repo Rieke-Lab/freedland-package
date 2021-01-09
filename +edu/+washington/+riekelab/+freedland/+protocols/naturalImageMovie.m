@@ -13,7 +13,7 @@ classdef naturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStageProt
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(5) % number of epochs to queue
+        numberOfAverages = uint16(1) % number of epochs to queue
         amp % Output amplifier
         
     end
@@ -41,13 +41,13 @@ classdef naturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStageProt
 
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
-                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',2);
+                    obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
             % Gather natural image information
             [path,image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNo, obj.observerNo);
-            image = image ./ max(image(:));
+            image = image ./ max(image(:)); % Normalize (scale to monitor)
             obj.backgroundIntensity = mean(image(:));
             obj.imageMatrix = uint8(image.*255);
                     
@@ -55,29 +55,28 @@ classdef naturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStageProt
             obj.xTraj = path.x;
             obj.yTraj = path.y;
             
+            % Invert for monitor and adjust position relative to center of image
+            obj.xTraj = -(obj.xTraj - size(image,2)/2);
+            obj.yTraj = (obj.yTraj - size(image,1)/2);
+            
             % Convert from DOVES units (1 px = 1 arcmin) to monitor units
             obj.xTraj = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.xTraj,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix');
             obj.yTraj = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.xTraj,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix');
-            obj.timeTraj = (0:(size(obj.xTraj,1)-1)) ./ 200; % convert DOVES resolution (200Hz) to seconds
-                
-            % Invert for monitor and adjust position relative to center of image
-            obj.xTraj = -(obj.xTraj - size(image,2)/2);
-            obj.yTraj = (obj.yTraj - size(image,1)/2);
+                obj.yTraj,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix');
+            obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % convert DOVES resolution (200Hz) to seconds
         end
         
         function prepareEpoch(obj, epoch)
-            
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
             device = obj.rig.getDevice(obj.amp);
-            duration = (obj.preTime + obj.stimTime + obj.tailTime)*2 / 1e3;
+            duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
 
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             
-            % Add metadata from Stage, makes analysis easier.
+            % Add metadata from Stage.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
             epoch.addParameter('micronsPerPixel',obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
             epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
@@ -87,14 +86,15 @@ classdef naturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStageProt
         function p = createPresentation(obj)
             
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize(); % in normal pixels            
-            p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 2 * 1e-3);
+            p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
             
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity)
             
             % Insert image and sizing information for stage.
             scene = stage.builtin.stimuli.Image(obj.imageMatrix);
-            scene.size = canvasSize;
+            scene.size = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(fliplr(size(obj.imageMatrix)),...
+                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix'); % Convert to monitor units
             p0 = canvasSize/2;
             scene.position = p0;
             

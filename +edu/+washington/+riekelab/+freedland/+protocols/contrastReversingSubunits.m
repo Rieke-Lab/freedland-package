@@ -8,8 +8,8 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         tailTime    = 250   % ms
 
         % Disk sizing and properties
-        centerRadius        = 100   % in um
-        subunitRadius       = 20    % in um
+        centerDiameter      = 200   % in um
+        subunitDiameter     = 40    % in um
         primaryContrast     = 0.2   % contrast presented to center RF (0 to 1)
         dotContrast         = 0.9   % contrast presented to subunit-searching dot (0 to 1)
         temporalFrequency   = 4     % Hz
@@ -30,7 +30,6 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         opposingDisk
         cartesianCoordinates
         polarCoordinates
-        polarCoordinates_um
         counter
         order
     end
@@ -49,21 +48,21 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
-                obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'))
-            
-            % Convert units from microns to pixels
-            canvasSize = fliplr(obj.rig.getDevice('Stage').getCanvasSize());
-            centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.centerRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
-            subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.subunitRadius,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
+                obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
             % Graphical figure
             obj.showFigure('edu.washington.riekelab.freedland.figures.contrastReversingSubunitsFigure',...
                 obj.rig.getDevice(obj.amp),'temporalFrequency',obj.temporalFrequency,...
                 'preTime',obj.preTime,'stimTime',obj.stimTime,...
                 'monitorSampleRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
-                'centerRadius',centerRadiusPix,'subunitRadius',subunitRadiusPix);
+                'centerRadius',obj.centerDiameter/2,'subunitRadius',obj.subunitDiameter/2); % in um
+
+            % Convert units from microns to pixels
+            canvasSize = fliplr(obj.rig.getDevice('Stage').getCanvasSize());
+            centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.centerDiameter/2,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
+            subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.subunitDiameter/2,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
             
             % Create pixel space
             [xx,yy] = meshgrid(1:canvasSize(2),1:canvasSize(1));
@@ -83,8 +82,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 angleCoordinates = 0:angleSweep:2*pi; % All possible angles
                 for b = 1:length(angleCoordinates)
                     % Identify coordinates
-                    obj.polarCoordinates(tempCounter,:) = [radialCoordinates(a) rad2deg(angleCoordinates(b))];
-                    obj.polarCoordinates_um(tempCounter,:) = [edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                    obj.polarCoordinates(tempCounter,:) = [edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                         radialCoordinates(a),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2um'),...
                         rad2deg(angleCoordinates(b))];
                     
@@ -97,7 +95,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                     tempCounter = tempCounter + 1;
                 end
             end
-            
+
             % Remove zeros
             obj.opposingDisk(sum(obj.cartesianCoordinates,2) == 0,:) = [];
             obj.polarCoordinates(sum(obj.cartesianCoordinates,2) == 0,:) = [];
@@ -107,6 +105,11 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             [obj.cartesianCoordinates,adj] = unique(obj.cartesianCoordinates,'rows','stable');
             obj.polarCoordinates = obj.polarCoordinates(adj,:);
             obj.opposingDisk = obj.opposingDisk(adj,:);
+            
+            % Adjust cartesian coordinates for export
+            obj.cartesianCoordinates = obj.cartesianCoordinates - repmat(fliplr(canvasSize/2),size(adj,1),1); % Center about zero
+            obj.cartesianCoordinates = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.cartesianCoordinates,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2um'); % Convert to microns
             
             % Estimate stimulus time
             disp(strcat('Unique locations to probe: ',mat2str(size(obj.opposingDisk,1))));
@@ -131,9 +134,8 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
             epoch.addResponse(device);
             
             % Add coordinates
-            epoch.addParameter('pixelCoordinates_cartesianPx',obj.cartesianCoordinates(obj.order(obj.counter+1),:));
-            epoch.addParameter('pixelCoordinates_polarPx',obj.polarCoordinates(obj.order(obj.counter+1),:));
-            epoch.addParameter('pixelCoordinates_polarMicrons',obj.polarCoordinates_um(obj.order(obj.counter+1),:));
+            epoch.addParameter('subunitCoordinates_cartesianMicrons',obj.cartesianCoordinates(obj.order(obj.counter+1),:)); % About center (for figure)
+            epoch.addParameter('subunitCoordinates_polarMicrons',obj.polarCoordinates(obj.order(obj.counter+1),:)); % For further analysis
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -144,7 +146,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         
         function p = createPresentation(obj)
             
-            p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
+            p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
 
@@ -165,17 +167,17 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
                 % Contrasting gratings between each set of masks
                 if a == 1
                     grate.phase = 180;
-                    grate.contrast  = obj.primaryContrast; % Multiplier on square wave
+                    spContrast  = obj.primaryContrast; % Multiplier on square wave
                 else
                     grate.phase = 0;
-                    grate.contrast  = obj.dotContrast; % Multiplier on square wave
+                    spContrast  = obj.dotContrast; % Multiplier on square wave
                 end
 
                 p.addStimulus(grate); % Add grating to the presentation
 
                 % Control contrast
                 grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
-                    @(state)getGrateContrast(obj, grate.contrast, state.time - obj.preTime/1e3));
+                    @(state)getGrateContrast(obj, spContrast, state.time - obj.preTime/1e3));
                 p.addController(grateContrast); % Add the controller
                 
                 % Hide during pre & post

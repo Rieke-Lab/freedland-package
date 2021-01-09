@@ -108,7 +108,7 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             %%%%%%%%% For adding negative contrast central disks.
             % Adding a negative option for every combination of disks
-            % produces an extremely large set. To minimize time:
+            % produces an extremely large set. To minimize our experiment:
             negativeDiskDimension = 2; % Dimensional space to add negative disks for.
             if obj.includeNegativeIntensity == true
                 % Identify all trials at proper dimension
@@ -121,24 +121,26 @@ classdef flashRegions < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.selections = unique(obj.selections,'rows');
             end
 
+            %%%%%%%%% For adding disks outside of our specific region.
             if strcmp(obj.sliceLocation,'center')
-                % Ignore surround entirely
+                % Exclude surround for most of dataset
                 obj.selections = [obj.selections,repelem(0,size(obj.selections,1),1)];
-                
                 if obj.includeSurroundIntensity == true
-                    % Add surround for specific dimensions only
-                    surroundDiskDimension = 2;
+                    surroundDiskDimension = 2; % Add surround for specific dimension only
                     dimSelect = obj.selections(sum(obj.selections == -1,2) == 0 &...
                         sum(obj.selections,2) == surroundDiskDimension,:); 
-                    dimSelect(:,end) = 1; % Allow surround to be present
+                    dimSelect(:,end) = 1;
                     obj.selections = [obj.selections; dimSelect];
                 end
             elseif strcmp(obj.sliceLocation,'surround')
-                % If we flash in the surround, the center must ALWAYS be
-                % included in the flash to better measure inhibition.
+                % Include center for entire experiment (helps measure inhibition)
                 obj.selections = [repelem(1,size(obj.selections,1),1), obj.selections];
+                
+                % Add center-only case & surround-only case to keep proper rank
+                centerOnly = [1 zeros(1,size(obj.selections,2)-1)];
+                surroundOnly = [0 ones(1,size(obj.selections,2)-1)];
+                obj.selections = [obj.selections; centerOnly; surroundOnly];
             end
-            
             disp(strcat('total disk combinations: ',mat2str(size(obj.selections,1))));
             totalTime = (size(obj.selections,1) * obj.numberOfAverages) * ((obj.preTime + obj.stimTime + obj.tailTime + 1500)/1000);
             disp(strcat('approx stimulus time (+1.5 sec delay):',mat2str(round(totalTime/60)),' minutes'));

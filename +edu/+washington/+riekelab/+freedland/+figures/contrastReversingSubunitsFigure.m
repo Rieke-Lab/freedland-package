@@ -14,7 +14,10 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
     
     properties (Access = private)
         axesHandle
-        summaryData
+        storeTracker
+        storeF1
+        storeF2
+        storeRatio
         dataTracker
     end
     
@@ -36,26 +39,9 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             obj.monitorSampleRate = ip.Results.monitorSampleRate;
             obj.centerRadius = ip.Results.centerRadius;
             obj.subunitRadius = ip.Results.subunitRadius;
-            
-            obj.createUi();
         end
-        
-        function createUi(obj)
-            import appbox.*;
-
-            iconDir = [fileparts(fileparts(mfilename('fullpath'))), '\+utils\+icons\'];
-            toolbar = findall(obj.figureHandle, 'Type', 'uitoolbar');
-            calculateWeights = uipushtool( ...
-                'Parent', toolbar, ...
-                'TooltipString', 'Export subunits', ...
-                'Separator', 'on', ...
-                'ClickedCallback', @obj.onSelectedExportSubunits);
-            setIconImage(calculateWeights, [iconDir, 'DoG.png']);
-        end
-
 
         function handleEpoch(obj, epoch)
-
             % Load amp data
             response            = epoch.getResponse(obj.ampDevice);
             epochResponseTrace  = response.getData();
@@ -84,49 +70,50 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             F2 = 2*X(F2ind); %double b/c of symmetry about zero
             
             % Build mask
-            currentSpotSize = epoch.parameters('pixelCoordinates_polarPx');
-            xCoord = obj.centerRadius + currentSpotSize(1) .* cos(deg2rad(currentSpotSize(2)));
-            yCoord = obj.centerRadius - currentSpotSize(1) .* sin(deg2rad(currentSpotSize(2)));
-            [xx,yy] = meshgrid(1:obj.centerRadius*2,1:obj.centerRadius*2);
+            currentSpotSize = epoch.parameters('subunitCoordinates_cartesianMicrons');
+            xCoord = obj.centerRadius + currentSpotSize(1);
+            yCoord = obj.centerRadius + currentSpotSize(2);
+            [xx,yy] = meshgrid(1:ceil(obj.centerRadius)*2,1:ceil(obj.centerRadius)*2);
             r_subunit = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= obj.subunitRadius;
+            ticklabels = (0:20:size(r_subunit,1)) - obj.centerRadius;
+            ticks = (0:20:size(r_subunit,1)*2);
             
             % Save to variable for identification
-            obj.dataTracker = cat(1,obj.dataTracker,[epoch.parameters('pixelCoordinates_polarMicrons'), F1, F2]);
-                
-            % First run
-            if ~isfield(obj.summaryData,'F1')
-                obj.summaryData.F1 = zeros(obj.centerRadius*2,obj.centerRadius*2);
-                obj.summaryData.F2 = zeros(obj.centerRadius*2,obj.centerRadius*2);
-                obj.summaryData.ratio = zeros(obj.centerRadius*2,obj.centerRadius*2);
-                obj.summaryData.tracker = zeros(obj.centerRadius*2,obj.centerRadius*2);
-            end
-            
-            % Assign values
-            obj.summaryData.tracker = obj.summaryData.tracker + r_subunit;
-            obj.summaryData.F1 = obj.summaryData.F1 + (F1 .* r_subunit);
-            obj.summaryData.F2 = obj.summaryData.F2 + (F2 .* r_subunit);
-            obj.summaryData.ratio = obj.summaryData.ratio + (F2/F1) .* r_subunit;
+            obj.dataTracker = cat(1,obj.dataTracker,[epoch.parameters('subunitCoordinates_polarMicrons'), F1, F2]);
 
-            figure(1)
+            % Assign values 
+            if isempty(obj.storeTracker)
+                obj.storeTracker    = zeros(size(r_subunit));
+                obj.storeF1         = zeros(size(r_subunit));
+                obj.storeF2         = zeros(size(r_subunit));
+                obj.storeRatio      = zeros(size(r_subunit));
+            end
+            obj.storeTracker    = obj.storeTracker + r_subunit;
+            obj.storeF1         = obj.storeF1 + (F1 .* r_subunit);
+            obj.storeF2         = obj.storeF2 + (F2 .* r_subunit);
+            obj.storeRatio      = obj.storeRatio + (F2/F1) .* r_subunit;
+            
+            % Plot
+            figure(20)
             subplot(1,3,1)
-            imagesc(obj.summaryData.F1 ./ obj.summaryData.tracker);
+            imagesc(obj.storeF1 ./ obj.storeTracker);
             title('F1')
+            xlabel('x-coordinate (um)')
+            ylabel('y-coordinate (um)')
+            set(gca, 'XTick', ticks, 'XTickLabel', ticklabels) % in um
+            set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
 
             subplot(1,3,2)
-            imagesc(obj.summaryData.F2 ./ obj.summaryData.tracker);
+            imagesc(obj.storeF2 ./ obj.storeTracker);
             title('F2')
+            set(gca, 'XTick', ticks, 'XTickLabel', ticklabels)
+            set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
             
             subplot(1,3,3)
-            imagesc(obj.summaryData.ratio);
+            imagesc(obj.storeRatio);
             title('F2/F1')
-        end
-        
-        function onSelectedExportSubunits(obj, ~, ~)
-            % Sort by F2 frequency
-            [~,i] = sort(obj.dataTracker(:,4),'descend');
-            
-            % Export as .txt.
-            dlmwrite(strcat('Documents/subunitLocation_um.txt'),obj.dataTracker(i,:))
+            set(gca, 'XTick', ticks, 'XTickLabel', ticklabels)
+            set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
         end
     end
 end

@@ -39,15 +39,6 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
         
         function createUi(obj)
             import appbox.*;
-
-            iconDir = [fileparts(fileparts(mfilename('fullpath'))), '\+utils\+icons\'];
-            toolbar = findall(obj.figureHandle, 'Type', 'uitoolbar');
-            calculateWeights = uipushtool( ...
-                'Parent', toolbar, ...
-                'TooltipString', 'Calculate Weights', ...
-                'Separator', 'on', ...
-                'ClickedCallback', @obj.onSelectedCalculateWeights);
-            setIconImage(calculateWeights, [iconDir, 'DoG.png']);
             
             obj.axesHandle = axes( ...
                 'Parent', obj.figureHandle, ...
@@ -100,6 +91,7 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
                 obj.summaryData.trackingResponses(SpotSizeIndex) = mean(obj.allEpochResponses(pullIndices));
             end
             
+            % Plot
             if isempty(obj.lineHandle)
                 obj.lineHandle = line(obj.summaryData.spotSizes, obj.summaryData.meanResponses,...
                     'Parent', obj.axesHandle,'Color','k','Marker','o');
@@ -107,22 +99,20 @@ classdef flashRegionsFigure < symphonyui.core.FigureHandler
                 set(obj.lineHandle, 'XData', obj.summaryData.spotSizes,...
                     'YData', obj.summaryData.meanResponses);
             end
-        end
-        
-        function onSelectedCalculateWeights(obj, ~, ~)
-            A = obj.summaryData.trackingSpotSizes;
-            B = obj.summaryData.trackingResponses;
             
-            % A * w = B, where w is weights
-            w = A\B;
+            %%%%% Save data for further experiments
+            if rank(obj.summaryData.trackingSpotSizes) == size(obj.summaryData.trackingSpotSizes,2)
+                
+                % A * w = B, where w is weights
+                w = obj.summaryData.trackingSpotSizes\obj.summaryData.trackingResponses;
 
-            % Export
-            title(obj.axesHandle,num2str(w));
-            w = [w, w/max(w)]'; % Add row for normalization
-            dlmwrite(strcat('Documents/weights.txt'),w)
-            disp(w)
+                % Export
+                title(obj.axesHandle,num2str(w));
+                w = [w, w/max(w)]'; % Add row for normalization
+                dlmwrite(strcat('Documents/weights.txt'),w)
+            end
+            %%%%%
         end
-        
     end
     
 end

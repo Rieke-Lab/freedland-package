@@ -96,7 +96,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             % Identify natural image movie region to show.
             [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
             m = sqrt((xx - settings.videoSize(2)/2).^2 + (yy - settings.videoSize(1)/2).^2);
-            
+
             % Refine naturalistic movie
             if obj.showNaturalMovie == true
                 if strcmp(obj.naturalMovieRegion,'center-only')
@@ -111,7 +111,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 for a = 1:size(rawMov,4)
                     rawMov(:,:,1,a) = rawMov(:,:,1,a) .* mask + ~mask .* obj.backgroundIntensity;
                 end
-                obj.filename{2,1} = {'natural'};
+                obj.filename{2,1} = 'natural';
                 outputMovie{2,1} = rawMov .* 255;
             end
             
@@ -128,7 +128,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                     
                     linearEquiv(:,:,1,a) = mask .* (rawValue ./ normalizingValue) + ~mask .* obj.backgroundIntensity;
                 end
-                obj.filename{3,1} = {'linearEquivalent'};
+                obj.filename{3,1} = 'linearEquivalent';
                 outputMovie{3,1} = linearEquiv .* 255;
             end
             
@@ -154,7 +154,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             end
             reducedMov = reducedStimulus ./ repmat(sum(subunitMasks,3),1,1,1,size(reducedStimulus,4)); % For overlapping subunits: average results
             reducedMov(isnan(reducedMov)) = obj.backgroundIntensity;
-            obj.filename{1,1} = {'reduced'};
+            obj.filename{1,1} = 'reduced';
             outputMovie{1,1} = reducedMov .* 255;
             
             % Export all movies as .avi (to prevent compression)
@@ -165,17 +165,18 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             blankFrames = ones(size(reducedMov(:,:,1,1))) .* 255 .* obj.backgroundIntensity;
             preFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.preTime/1e3)));
             postFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.tailTime/1e3)));
+
             for a = 1:length(outputMovie)
-                if ~isempty(outputMovie{1,a})
-                    outputMovie{1,a} = uint8(cat(4,preFrames,outputMovie{a,1},postFrames));
+                if ~isempty(outputMovie{a,1})
+                    specificMov = uint8(cat(4,preFrames,outputMovie{a,1},postFrames));
                     
                     % Export movies
                     v = VideoWriter(strcat(obj.directory,obj.filename{a,1}),'Uncompressed AVI');
                     v.FrameRate = refreshRate;
                     
                     open(v)
-                    for b = 1:size(outputMovie{a,1},4)
-                        writeVideo(v,outputMovie{a,1}(:,:,1,a));
+                    for b = 1:size(specificMov,4)
+                        writeVideo(v,specificMov(:,:,1,b));
                     end
                     close(v)
                 end

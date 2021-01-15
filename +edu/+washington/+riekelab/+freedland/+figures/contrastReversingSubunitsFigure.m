@@ -114,6 +114,41 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             title('F2/F1')
             set(gca, 'XTick', ticks, 'XTickLabel', ticklabels)
             set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
+            hold on
+            
+            % Calculate best clusters (ordered from most to least likely)
+            centroid = exportSubunits(obj); 
+            
+            subunits = 5; % Number of clusters to show on figure
+            plot(centroid(1:subunits,1)+size(obj.storeRatio,1)/2,centroid(1:subunits,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)
+            hold off
+        end
+        
+        function centroid = exportSubunits(obj)
+            
+            % Find unique values
+            A = sort(unique(obj.storeRatio(:)),'descend');
+            A(isnan(A)) = [];
+            
+            centroid = zeros(size(A,1),3);
+            offset = size(obj.storeRatio,1)/2;
+            for a = 1:size(A,1)
+                
+                % Calculate x,y centroid for each F2/F1 ratio
+                [x,y] = find(ratio == A(a));
+                centroid(a,:) = [mean(y)-offset, mean(x)-offset, A(a)];
+
+                % Confirm subunits are sufficiently far apart
+                for b = 1:a-1
+                    if norm(centroid(a,1:2) - centroid(b,1:2)) < obj.subunitRadius % Coordinates too clustered
+                        centroid(a,1:2) = [Inf Inf];
+                    end
+                end
+            end
+            
+            % Isolate final subunits
+            centroid(centroid(:,1) == Inf,:) = [];
+            dlmwrite(strcat('Documents/subunits.txt'),centroid) % Export as .txt
         end
     end
 end

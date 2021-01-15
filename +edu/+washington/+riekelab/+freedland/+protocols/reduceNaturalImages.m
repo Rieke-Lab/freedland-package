@@ -12,9 +12,9 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
         
         % Subunit information
-        subunitDiameter         = 40;          % in microns
-        subunitLocation_radial  = [25 50 75];  % grid of subunits (in radial coordinates: r, in microns)
-        subunitLocation_theta   = [0 120 240]; % grid of subunits (in radial coordinates: theta, in degrees)
+        subunitDiameter     = 40;          % in microns
+        subunitLocation_y   = [25 50 75];  % grid of subunits (in um, first column from exported subunits.txt)
+        subunitLocation_x   = [0 120 240]; % grid of subunits (in um, second column from exported subunits.txt)
         
         % Natural image information
         imageNo     = 5; % natural image to reduce (1 - 101)
@@ -90,8 +90,10 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             % Adjust units to DOVES database (units of arcmin)
             subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.subunitDiameter/2,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
-            subunitLocationPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.subunitLocation_radial,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+            subunitLocationPix_x = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.subunitLocation_x,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+            subunitLocationPix_y = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.subunitLocation_y,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
             
             % Identify natural image movie region to show.
             [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
@@ -133,13 +135,13 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             end
             
             % Build reduced stimulus
-            subunitMasks = zeros([settings.videoSize,length(obj.subunitLocation_radial)]);
+            subunitMasks = zeros([settings.videoSize,length(subunitLocationPix_x)]);
             reducedStimulus = zeros(size(convolvedStimulus));
-            for a = 1:length(obj.subunitLocation_radial)
+            for a = 1:length(subunitLocationPix_x)
                 
                 % Build a mask for each subunit
-                xCoord = settings.videoSize(2)/2 + subunitLocationPix(a) .* cos(deg2rad(obj.subunitLocation_theta(a)));
-                yCoord = settings.videoSize(1)/2 - subunitLocationPix(a) .* sin(deg2rad(obj.subunitLocation_theta(a)));
+                xCoord = settings.videoSize(2)/2 + subunitLocationPix_y; % intentionally flipped (meshgrid rotates)
+                yCoord = settings.videoSize(1)/2 + subunitLocationPix_x;
                 [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
                 subunitMasks(:,:,a) = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= subunitRadiusPix;
                 

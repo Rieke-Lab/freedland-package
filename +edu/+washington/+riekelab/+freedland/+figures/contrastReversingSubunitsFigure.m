@@ -117,7 +117,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             hold on
             
             % Calculate best clusters (ordered from most to least likely)
-            centroid = exportSubunits(obj); 
+            centroid = exportSubunits(obj); % [y, x, F2/F1]
             
             subunits = 5; % Number of clusters to show on figure
             plot(centroid(1:subunits,1)+size(obj.storeRatio,1)/2,centroid(1:subunits,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)

@@ -7,9 +7,9 @@ classdef testSubunitLocation < edu.washington.riekelab.protocols.RiekeLabStagePr
         tailTime    = 250  % in ms
         
         % Subunit information
-        subunitDiameter         = 40;          % in microns
-        subunitLocation_radial  = [25 50 75];  % grid of subunits (in radial coordinates: r, in microns)
-        subunitLocation_theta   = [0 120 240]; % grid of subunits (in radial coordinates: theta, in degrees)
+        subunitDiameter     = 40;          % in microns
+        subunitLocation_y   = [25 50 75];  % grid of subunits (in um, first column from exported subunits.txt)
+        subunitLocation_x   = [0 120 240]; % grid of subunits (in um, second column from exported subunits.txt)
         
         % Stimulus parameters
         backgroundIntensity = 0.168;    % intensity of background
@@ -67,21 +67,22 @@ classdef testSubunitLocation < edu.washington.riekelab.protocols.RiekeLabStagePr
                 end
             end
             
-            % Adjust units to DOVES database (units of arcmin)
+            % Adjust units to pixels
             subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.subunitDiameter/2,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
-            subunitLocationPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                obj.subunitLocation_radial,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
-            videoSize = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                 fliplr(obj.rig.getDevice('Stage').getCanvasSize()),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2arcmin');
+                obj.subunitDiameter/2,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
+            subunitPix_y = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.subunitLocation_y,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
+            subunitPix_x = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                obj.subunitLocation_x,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
+            videoSize = fliplr(obj.rig.getDevice('Stage').getCanvasSize());
 
             % Build subunits
-            tempMasks = cell(length(obj.subunitLocation_radial),2);
-            for a = 1:length(obj.subunitLocation_radial)
+            tempMasks = cell(length(subunitPix_x),2);
+            for a = 1:length(obj.subunitPix_x)
                 
                 % Build a mask for each subunit
-                xCoord = videoSize(2)/2 + subunitLocationPix(a) .* cos(deg2rad(obj.subunitLocation_theta(a)));
-                yCoord = videoSize(1)/2 - subunitLocationPix(a) .* sin(deg2rad(obj.subunitLocation_theta(a)));
+                xCoord = videoSize(2)/2 + subunitPix_y; % intentionally flipped (meshgrid rotates)
+                yCoord = videoSize(1)/2 + subunitPix_x;
                 [xx,yy] = meshgrid(1:videoSize(2),1:videoSize(1));
                 subunit = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= subunitRadiusPix;
                 

@@ -145,18 +145,18 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             
             % Generate random coordinates as needed
             if obj.showRandomCoordinates == true
-                obj.randomCoordinates_x = (rand(length(subunitLocationPix_x),1) - 0.5) .* settings.rfSizing.zeroPt;
-                obj.randomCoordinates_y = (rand(length(subunitLocationPix_y),1) - 0.5) .* settings.rfSizing.zeroPt;
+                obj.randomCoordinates_x = (zeros(length(subunitLocationPix_x),1));
+                obj.randomCoordinates_y = (zeros(length(subunitLocationPix_x),1));
                 
-                % Confirm coordinates are sufficiently far apart
-                for a = 1:length(obj.randomCoordinates_x)-1
-                    referenceCoordinate = [obj.randomCoordinates_x(a), obj.randomCoordinates_y(a)];
-                    for b = a+1:length(obj.randomCoordinates_x)
-                        iter = 1;
-                        while (norm(referenceCoordinate - [obj.randomCoordinates_x(b), obj.randomCoordinates_y(b)]) < subunitRadiusPix*2) && (iter < 1e4)
-                            obj.randomCoordinates_x = (rand(length(subunitLocationPix_x),1) - 0.5) .* settings.rfSizing.zeroPt;
-                            obj.randomCoordinates_y = (rand(length(subunitLocationPix_x),1) - 0.5) .* settings.rfSizing.zeroPt;
-                            iter = iter+1;
+                for a = 1:length(obj.randomCoordinates_x)
+                    obj.randomCoordinates_x(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
+                    obj.randomCoordinates_y(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
+                    
+                    % Confirm random subunits are sufficiently far apart
+                    for b = 1:a-1
+                        while norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [obj.randomCoordinates_x(b) obj.randomCoordinates_y(b)]) < obj.subunitRadius*2 % Coordinates too close
+                            obj.randomCoordinates_x(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
+                            obj.randomCoordinates_y(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
                         end
                     end
                 end

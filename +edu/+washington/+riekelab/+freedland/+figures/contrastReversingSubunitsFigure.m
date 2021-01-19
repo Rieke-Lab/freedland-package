@@ -79,7 +79,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             ticks = (0:20:size(r_subunit,1)*2);
             
             % Save to variable for identification
-            obj.dataTracker = cat(1,obj.dataTracker,[epoch.parameters('subunitCoordinates_polarMicrons'), F1, F2]);
+            obj.dataTracker = cat(1,obj.dataTracker,[epoch.parameters('subunitCoordinates_cartesianMicrons'), F1, F2]);
 
             % Assign values 
             if isempty(obj.storeTracker)
@@ -127,7 +127,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
         function centroid = exportSubunits(obj)
             
             % Find unique values
-            A = sort(unique(obj.storeRatio(:)),'descend');
+            A = sort(unique(obj.storeRatio(:)),'descend'); % Use interpolated sample
             A(isnan(A)) = [];
             
             centroid = zeros(size(A,1),3);
@@ -139,8 +139,8 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
                 centroid(a,:) = [mean(y)-offset, mean(x)-offset, A(a)];
 
                 % Confirm subunits are sufficiently far apart
-                for b = 1:a-1
-                    if norm(centroid(a,1:2) - centroid(b,1:2)) < obj.subunitRadius % Coordinates too clustered
+                for b = 1:a-1 % All previous coordinates
+                    if norm(centroid(a,1:2) - centroid(b,1:2)) < obj.subunitRadius*2 % Coordinates too clustered
                         centroid(a,1:2) = [Inf Inf];
                     end
                 end
@@ -148,7 +148,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             
             % Isolate final subunits
             centroid(centroid(:,1) == Inf,:) = [];
-            dlmwrite(strcat('Documents/subunits.txt'),centroid) % Export as .txt
+            dlmwrite(strcat('Documents/subunits.txt'),centroid') % Export as .txt
         end
     end
 end

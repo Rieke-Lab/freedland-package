@@ -13,14 +13,16 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         
         % Subunit information
         subunitDiameter     = 40;          % in microns
-        subunitLocation_y   = [25 50 75];  % grid of subunits (in um, first column from exported subunits.txt)
-        subunitLocation_x   = [0 120 240]; % grid of subunits (in um, second column from exported subunits.txt)
+        subunitLocation_y   = [25 50 75];  % grid of subunits (in um, first row from exported subunits.txt)
+        subunitLocation_x   = [0 120 240]; % grid of subunits (in um, second row from exported subunits.txt)
         
         % Natural image information
         imageNo     = 5; % natural image to reduce (1 - 101)
         observerNo  = 1; % different observer's eye trajectory (1 - 19)
         
         % Experiment settings
+        experimentSettings       = 'add subunits';  % "simple": show specified subunits; "add subunits": show groups of (1, 2, 3, ...) subunits.
+        showRandomCoordinates    = true;            % include trials with randomly-located subunits. Follows same approach as "experimentSettings".
         showNaturalMovie         = true;            % show natural image movie prior to reduced movie
         naturalMovieRegion       = 'center-only';   % specific region to show natural image movie
         showLinearEquivalentDisk = true;            % show reduced movie (single linear equivalent disk)
@@ -35,8 +37,11 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        experimentSettingsType = symphonyui.core.PropertyType('char', 'row', {'simple', 'add subunits'}) 
         naturalMovieRegionType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only', 'full-field'}) 
         backgroundIntensity
+        randomCoordinates_x
+        randomCoordinates_y
         directory
         filename
         counter
@@ -113,8 +118,8 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 for a = 1:size(rawMov,4)
                     rawMov(:,:,1,a) = rawMov(:,:,1,a) .* mask + ~mask .* obj.backgroundIntensity;
                 end
-                obj.filename{2,1} = 'natural';
-                outputMovie{2,1} = rawMov .* 255;
+                obj.filename{1,1} = 'natural';
+                outputMovie{1,1} = rawMov .* 255;
             end
             
             % Calculate linear equivalent center
@@ -130,36 +135,88 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                     
                     linearEquiv(:,:,1,a) = mask .* (rawValue ./ normalizingValue) + ~mask .* obj.backgroundIntensity;
                 end
-                obj.filename{3,1} = 'linearEquivalent';
-                outputMovie{3,1} = linearEquiv .* 255;
+                obj.filename{2,1} = 'linearEquivalent';
+                outputMovie{2,1} = linearEquiv .* 255;
             end
             
-            % Build reduced stimulus
+            %%% Build reduced stimulus
             subunitMasks = zeros([settings.videoSize,length(subunitLocationPix_x)]);
-            reducedStimulus = zeros(size(convolvedStimulus));
-            for a = 1:length(subunitLocationPix_x)
+            [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
+            
+            % Generate random coordinates as needed
+            if obj.showRandomCoordinates == true
+                obj.randomCoordinates_x = (rand(length(subunitLocationPix_x),1) - 0.5) .* settings.rfSizing.zeroPt;
+                obj.randomCoordinates_y = (rand(length(subunitLocationPix_y),1) - 0.5) .* settings.rfSizing.zeroPt;
                 
-                % Build a mask for each subunit
-                xCoord = settings.videoSize(2)/2 + subunitLocationPix_y; % intentionally flipped (meshgrid rotates)
-                yCoord = settings.videoSize(1)/2 + subunitLocationPix_x;
-                [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
-                subunitMasks(:,:,a) = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= subunitRadiusPix;
+                % Confirm coordinates are sufficiently far apart
+                for a = 1:length(obj.randomCoordinates_x)-1
+                    referenceCoordinate = [obj.randomCoordinates_x(a), obj.randomCoordinates_y(a)];
+                    for b = a+1:length(obj.randomCoordinates_x)
+                        iter = 1;
+                        while (norm(referenceCoordinate - [obj.randomCoordinates_x(b), obj.randomCoordinates_y(b)]) < subunitRadiusPix*2) && (iter < 1e4)
+                            obj.randomCoordinates_x = (rand(length(subunitLocationPix_x),1) - 0.5) .* settings.rfSizing.zeroPt;
+                            obj.randomCoordinates_y = (rand(length(subunitLocationPix_x),1) - 0.5) .* settings.rfSizing.zeroPt;
+                            iter = iter+1;
+                        end
+                    end
+                end
+                iterations = 2;
+            else
+                iterations = 1;
+            end
+            
+            for d = 1:iterations % Experiment set
                 
-                % Integrate each frame using linear-equivalent disk
-                normalizingValue = RFFilter .* subunitMasks(:,:,a);
-                normalizingValue = sum(normalizingValue(:)); % RF * mask
-                for b = 1:size(rawMov,4)
-                    rawValue = convolvedStimulus(:,:,1,b) .* subunitMasks(:,:,a);
-                    rawValue = sum(rawValue(:)); % RF * image * mask
-                    reducedStimulus(:,:,1,b) = reducedStimulus(:,:,1,b) + subunitMasks(:,:,a) .* (rawValue / normalizingValue);
+                % Whether to produce one movie or multiple movies
+                if strcmp(obj.experimentSettings,'simple')
+                    reducedStimulus = zeros(size(convolvedStimulus));
+                elseif strcmp(obj.experimentSettings,'add subunits')
+                    reducedStimulus = zeros([size(convolvedStimulus),length(subunitLocationPix_x)]);
+                end
+                
+                for a = 1:length(subunitLocationPix_x)
+                    
+                    % Build a mask for each subunit
+                    if d == 1 % Desired coordinates
+                        xCoord = settings.videoSize(2)/2 + subunitLocationPix_y(a); % intentionally flipped (meshgrid rotates)
+                        yCoord = settings.videoSize(1)/2 + subunitLocationPix_x(a);
+                    elseif d == 2 % Random coordinates
+                        xCoord = settings.videoSize(2)/2 + obj.randomCoordinates_y(a); % intentionally flipped (meshgrid rotates)
+                        yCoord = settings.videoSize(1)/2 + obj.randomCoordinates_x(a);
+                    end
+                    subunitMask = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= subunitRadiusPix;
+
+                    % Integrate each frame using linear-equivalent disk
+                    normalizingValue = RFFilter .* subunitMask;
+                    normalizingValue = sum(normalizingValue(:)); % RF * mask
+                    for b = 1:size(rawMov,4)
+                        rawValue = convolvedStimulus(:,:,1,b) .* subunitMask;
+                        rawValue = sum(rawValue(:)); % RF * image * mask
+
+                        % Add each frame
+                        if strcmp(obj.experimentSettings,'simple')
+                            reducedStimulus(:,:,1,b) = reducedStimulus(:,:,1,b) + subunitMask .* (rawValue / normalizingValue);
+                        elseif strcmp(obj.experimentSettings,'add subunits')
+                            for c = a:length(subunitLocationPix_x)
+                                reducedStimulus(:,:,1,b,c) = reducedStimulus(:,:,1,b,c) + subunitMask .* (rawValue / normalizingValue);
+                            end
+                        end
+                    end
+                end
+                reducedMov = reducedStimulus ./ repmat(sum(subunitMasks,3),1,1,1,size(reducedStimulus,4),size(reducedStimulus,5)); % For overlapping subunits: average results
+                reducedMov(isnan(reducedMov)) = obj.backgroundIntensity;
+
+                for a = 1:size(reducedMov,5)
+                    if d == 1
+                        obj.filename = [obj.filename;{strcat('reduced_',mat2str(a),'_',mat2str([subunitLocationPix_x(a) subunitLocationPix_y(a)]))}];
+                    elseif d == 2
+                        obj.filename = [obj.filename;{strcat('reducedRandomized_',mat2str(a),'_',mat2str([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)]))}];
+                    end
+                    outputMovie = [outputMovie;{reducedMov .* 255}];
                 end
             end
-            reducedMov = reducedStimulus ./ repmat(sum(subunitMasks,3),1,1,1,size(reducedStimulus,4)); % For overlapping subunits: average results
-            reducedMov(isnan(reducedMov)) = obj.backgroundIntensity;
-            obj.filename{1,1} = 'reduced';
-            outputMovie{1,1} = reducedMov .* 255;
             
-            % Export all movies as .avi (to prevent compression)
+            % Export all movies as .avi (no compression)
             obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
             
             % Add pre-time and post-time manually
@@ -200,7 +257,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
-            epoch.addParameter('movieType', obj.order{obj.counter+1});
+            epoch.addParameter('movieType', obj.filename{obj.order(obj.counter+1)});
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));

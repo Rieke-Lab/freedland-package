@@ -8,7 +8,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
 
         randomize = true; % whether to randomize movies shown
-        rawMovieFrequency = 3; % How often should we show the original movie amongst experimental movies? (i.e, 3 = every 3 experimental movies, we show 1 raw movie).
+        rawMovieFrequency = 0; % How often should we show the original movie amongst experimental movies? (i.e, 3 = every 3 experimental movies, we show 1 raw movie). Set to 0 to ignore.
         backgroundIntensity = 0.168; % 0 - 1
 
         % Additional parameters
@@ -64,7 +64,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             rawMovies = cell(size(D,1),1);
             testMovies = cell(size(D,1),1);
             for a = 1:length(D)
-                if sum(strfind(D(a).name,'1A')) > 0 || sum(strfind(D(a).name,'2A')) > 0
+                if (sum(strfind(D(a).name,'1A')) > 0 || sum(strfind(D(a).name,'2A')) > 0) && obj.rawMovieFrequency > 0
                     rawMovies{a,1} = D(a).name;
                 elseif sum(strfind(D(a).name,'.mp4')) > 0
                     testMovies{a,1} = D(a).name;
@@ -74,16 +74,20 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             rawMovies = rawMovies(~cellfun(@isempty, rawMovies(:,1)), :);
             
             % Seed in original files
-            obj.movieFilenames = {};
-            frequencyCheck = 0;
-            rawMovieCounter = 1;
-            for a = 1:size(testMovies,1)
-                if frequencyCheck == 0
-                    obj.movieFilenames = [obj.movieFilenames; {rawMovies{rawMovieCounter+1,1}}];
-                    rawMovieCounter = mod(rawMovieCounter + 1,size(rawMovies,1));
+            if obj.rawMovieFrequency > 0
+                obj.movieFilenames = {};
+                frequencyCheck = 0;
+                rawMovieCounter = 1;
+                for a = 1:size(testMovies,1)
+                    if frequencyCheck == 0
+                        obj.movieFilenames = [obj.movieFilenames; {rawMovies{rawMovieCounter+1,1}}];
+                        rawMovieCounter = mod(rawMovieCounter + 1,size(rawMovies,1));
+                    end
+                    obj.movieFilenames = [obj.movieFilenames; {testMovies{a,1}}];
+                    frequencyCheck = mod(frequencyCheck + 1,obj.rawMovieFrequency);
                 end
-                obj.movieFilenames = [obj.movieFilenames; {testMovies{a,1}}];
-                frequencyCheck = mod(frequencyCheck + 1,obj.rawMovieFrequency);
+            else % All movies are tested at equal rates
+                obj.movieFilenames = testMovies;
             end
             
             obj.sequence = repmat(1:size(obj.movieFilenames,1),1,obj.numberOfAverages);

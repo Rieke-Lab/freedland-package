@@ -87,14 +87,18 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
                 obj.storeF1         = zeros(size(r_subunit));
                 obj.storeF2         = zeros(size(r_subunit));
                 obj.storeRatio      = zeros(size(r_subunit));
+                close(figure(20))
             end
             obj.storeTracker    = obj.storeTracker + r_subunit;
             obj.storeF1         = obj.storeF1 + (F1 .* r_subunit);
             obj.storeF2         = obj.storeF2 + (F2 .* r_subunit);
-            obj.storeRatio      = obj.storeRatio + (F2/F1) .* r_subunit;
+            if ~isnan(F2/F1)
+                obj.storeRatio = obj.storeRatio + (F2/F1) .* r_subunit;
+            end
             
             % Plot
             figure(20)
+            set(gcf,'Position',[100 200 900 280])
             subplot(1,3,1)
             imagesc(obj.storeF1 ./ obj.storeTracker);
             title('F1')
@@ -115,17 +119,21 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             set(gca, 'XTick', ticks, 'XTickLabel', ticklabels)
             set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
             hold on
-            
+
             % Calculate best clusters (ordered from most to least likely)
             centroid = exportSubunits(obj); % [y, x, F2/F1]
-            
-            subunits = 5; % Number of clusters to show on figure
-            plot(centroid(1:subunits,1)+size(obj.storeRatio,1)/2,centroid(1:subunits,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)
+            subunits = 8; % Number of clusters to show on figure
+
+            if size(centroid,1) > subunits
+                plot(centroid(1:subunits,1)+size(obj.storeRatio,1)/2,centroid(1:subunits,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)
+            else
+                plot(centroid(:,1)+size(obj.storeRatio,1)/2,centroid(:,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)
+            end
             hold off
         end
         
         function centroid = exportSubunits(obj)
-            
+
             % Find unique values
             A = sort(unique(obj.storeRatio(:)),'descend'); % Use interpolated sample
             A(isnan(A)) = [];
@@ -135,7 +143,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             for a = 1:size(A,1)
                 
                 % Calculate x,y centroid for each F2/F1 ratio
-                [x,y] = find(ratio == A(a));
+                [x,y] = find(obj.storeRatio == A(a));
                 centroid(a,:) = [mean(y)-offset, mean(x)-offset, A(a)];
 
                 % Confirm subunits are sufficiently far apart
@@ -148,7 +156,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             
             % Isolate final subunits
             centroid(centroid(:,1) == Inf,:) = [];
-            dlmwrite(strcat('Documents/subunits.txt'),centroid') % Export as .txt
+            csvwrite(strcat('Documents/subunits.csv'),centroid') % Export as csv
         end
     end
 end

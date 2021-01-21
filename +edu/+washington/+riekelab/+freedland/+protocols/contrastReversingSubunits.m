@@ -145,7 +145,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
         end
         
         function p = createPresentation(obj)
-            
+
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();

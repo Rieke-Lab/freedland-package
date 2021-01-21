@@ -13,8 +13,8 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         
         % Subunit information
         subunitDiameter     = 40;          % in microns
-        subunitLocation_y   = [25 50 75];  % grid of subunits (in um, first row from exported subunits.txt)
-        subunitLocation_x   = [0 120 240]; % grid of subunits (in um, second row from exported subunits.txt)
+        subunitLocation_x   = [25 50 75];  % grid of subunits (in um, first row from exported subunits.txt)
+        subunitLocation_y   = [0 120 240]; % grid of subunits (in um, second row from exported subunits.txt)
         
         % Natural image information
         imageNo     = 5; % natural image to reduce (1 - 101)
@@ -104,6 +104,8 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
             m = sqrt((xx - settings.videoSize(2)/2).^2 + (yy - settings.videoSize(1)/2).^2);
 
+            outputMovie = {};
+            obj.filename = {};
             % Refine naturalistic movie
             if obj.showNaturalMovie == true
                 if strcmp(obj.naturalMovieRegion,'center-only')
@@ -143,18 +145,19 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             subunitMasks = zeros([settings.videoSize,length(subunitLocationPix_x)]);
             [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
             
-            % Generate random coordinates as needed
+            % Generate random coordinates as needed (in arcmin)
             if obj.showRandomCoordinates == true
                 obj.randomCoordinates_x = (zeros(length(subunitLocationPix_x),1));
                 obj.randomCoordinates_y = (zeros(length(subunitLocationPix_x),1));
                 
                 for a = 1:length(obj.randomCoordinates_x)
-                    obj.randomCoordinates_x(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
-                    obj.randomCoordinates_y(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
+                    obj.randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
+                    obj.randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
                     
                     % Confirm random subunits are sufficiently far apart
                     for b = 1:a-1
-                        while norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [obj.randomCoordinates_x(b) obj.randomCoordinates_y(b)]) < obj.subunitRadius*2 % Coordinates too close
+                        while norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [subunitLocationPix_x(a) subunitLocationPix_x(a)]) < subunitRadiusPix*2 &&... % Coordinates too close to real coordinates
+                            norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [obj.randomCoordinates_x(b) obj.randomCoordinates_y(b)]) < subunitRadiusPix*2 % Coordinates too close to each other
                             obj.randomCoordinates_x(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
                             obj.randomCoordinates_y(a) = (rand() - 0.5) .* settings.rfSizing.zeroPt;
                         end
@@ -167,6 +170,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             
             for d = 1:iterations % Experiment set
                 
+                subunitMaskTracker = zeros([size(xx) length(subunitLocationPix_x)]);
                 % Whether to produce one movie or multiple movies
                 if strcmp(obj.experimentSettings,'simple')
                     reducedStimulus = zeros(size(convolvedStimulus));
@@ -175,16 +179,16 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 end
                 
                 for a = 1:length(subunitLocationPix_x)
-                    
                     % Build a mask for each subunit
                     if d == 1 % Desired coordinates
-                        xCoord = settings.videoSize(2)/2 + subunitLocationPix_y(a); % intentionally flipped (meshgrid rotates)
-                        yCoord = settings.videoSize(1)/2 + subunitLocationPix_x(a);
+                        xCoord = settings.videoSize(2)/2 + subunitLocationPix_x(a); % intentionally flipped (meshgrid rotates)
+                        yCoord = settings.videoSize(1)/2 + subunitLocationPix_y(a);
                     elseif d == 2 % Random coordinates
-                        xCoord = settings.videoSize(2)/2 + obj.randomCoordinates_y(a); % intentionally flipped (meshgrid rotates)
-                        yCoord = settings.videoSize(1)/2 + obj.randomCoordinates_x(a);
+                        xCoord = settings.videoSize(2)/2 + obj.randomCoordinates_x(a); % intentionally flipped (meshgrid rotates)
+                        yCoord = settings.videoSize(1)/2 + obj.randomCoordinates_y(a);
                     end
                     subunitMask = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= subunitRadiusPix;
+                    subunitMaskTracker(:,:,a) = subunitMask;
 
                     % Integrate each frame using linear-equivalent disk
                     normalizingValue = RFFilter .* subunitMask;
@@ -203,28 +207,49 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                         end
                     end
                 end
-                reducedMov = reducedStimulus ./ repmat(sum(subunitMasks,3),1,1,1,size(reducedStimulus,4),size(reducedStimulus,5)); % For overlapping subunits: average results
-                reducedMov(isnan(reducedMov)) = obj.backgroundIntensity;
+                
+                % Average overlapping regions
+                for c = 1:length(subunitLocationPix_x);
+                    reducedStimulus(:,:,:,:,c) = reducedStimulus(:,:,:,:,c) ./ repmat(sum(subunitMaskTracker(:,:,1:c),3),1,1,1,size(reducedStimulus,4)); % For overlapping subunits: average results
+                end
+                reducedStimulus(isnan(reducedStimulus)) = obj.backgroundIntensity;
 
-                for a = 1:size(reducedMov,5)
+                for a = 1:size(reducedStimulus,5)
                     if d == 1
-                        obj.filename = [obj.filename;{strcat('reduced_',mat2str(a),'_',mat2str([subunitLocationPix_x(a) subunitLocationPix_y(a)]))}];
+                        if strcmp(obj.experimentSettings,'simple')
+                            co = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                            [subunitLocationPix_x' subunitLocationPix_y'],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
+                            obj.filename = [obj.filename;{strcat('reduced_all_',mat2str(co))}]; % Coordinates in microns
+                        elseif strcmp(obj.experimentSettings,'add subunits')  
+                            co = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                            [subunitLocationPix_x(1:a)' subunitLocationPix_y(1:a)'],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
+                            obj.filename = [obj.filename;{strcat('reduced_',mat2str(a),'subunits_',mat2str(co))}]; % Coordinates in microns
+                        end
                     elseif d == 2
-                        obj.filename = [obj.filename;{strcat('reducedRandomized_',mat2str(a),'_',mat2str([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)]))}];
+                        if strcmp(obj.experimentSettings,'simple')
+                            co = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                            [obj.randomCoordinates_x obj.randomCoordinates_y],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
+                            obj.filename = [obj.filename;{strcat('reducedRandomized_all_',mat2str(co))}]; % Coordinates in microns
+                        elseif strcmp(obj.experimentSettings,'add subunits')    
+                            co = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                            [obj.randomCoordinates_x(1:a) obj.randomCoordinates_y(1:a)],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
+                            obj.filename = [obj.filename;{strcat('reducedRandomized_',mat2str(a),'subunits_',mat2str(co))}]; % Coordinates in microns
+                        end
                     end
-                    outputMovie = [outputMovie;{reducedMov .* 255}];
+                    outputMovie = [outputMovie;{reducedStimulus(:,:,:,:,a) .* 255}];
                 end
             end
             
-            % Export all movies as .avi (no compression)
+            % Export all movies
             obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
             
             % Add pre-time and post-time manually
             refreshRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
-            blankFrames = ones(size(reducedMov(:,:,1,1))) .* 255 .* obj.backgroundIntensity;
+            blankFrames = ones(size(reducedStimulus(:,:,1,1))) .* 255 .* obj.backgroundIntensity;
             preFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.preTime/1e3)));
             postFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.tailTime/1e3)));
 
+            disp('Exporting movies...')
             for a = 1:length(outputMovie)
                 if ~isempty(outputMovie{a,1})
                     specificMov = uint8(cat(4,preFrames,outputMovie{a,1},postFrames));
@@ -242,7 +267,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             end
             
             obj.counter = 0;
-            obj.order = repmat(obj.filename,obj.numberOfAverages,1);
+            obj.order = repmat(1:length(obj.filename),1,obj.numberOfAverages);
             if obj.randomize == true
                 obj.order = obj.order(randperm(length(obj.order)));
             end
@@ -274,7 +299,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
 
             % Prep to display image
-            scene = stage.builtin.stimuli.Movie(fullfile(obj.directory,strcat(obj.order{obj.counter+1},'.avi')));
+            scene = stage.builtin.stimuli.Movie(fullfile(obj.directory,strcat(obj.filename{obj.order(obj.counter+1)},'.avi')));
             scene.size = canvasSize;
             p0 = canvasSize/2;
             scene.position = p0;

@@ -157,8 +157,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                     % Confirm random subunits are sufficiently far apart
                     for b = 1:a-1
                         errorTracker = 1;
-                        while norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [subunitLocationPix_x(a) subunitLocationPix_y(a)]) < subunitRadiusPix*2 &&... % Coordinates too close to real coordinates
-                            norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [obj.randomCoordinates_x(b) obj.randomCoordinates_y(b)]) < subunitRadiusPix*2 % Coordinates too close to each other
+                        while norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [obj.randomCoordinates_x(b) obj.randomCoordinates_y(b)]) < subunitRadiusPix*2 % Coordinates too close to each other
                             obj.randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
                             obj.randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
                             errorTracker = errorTracker + 1;

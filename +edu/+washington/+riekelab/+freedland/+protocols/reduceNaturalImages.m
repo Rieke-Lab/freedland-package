@@ -154,20 +154,30 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                     obj.randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
                     obj.randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
                     
-                    % Confirm random subunits are sufficiently far apart
-                    for b = 1:a-1
-                        errorTracker = 1;
-                        while norm([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)] - [obj.randomCoordinates_x(b) obj.randomCoordinates_y(b)]) < subunitRadiusPix*2 % Coordinates too close to each other
+                    % Confirm subunit is sufficient far away from others
+                    A = repmat([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)],a-1,1);
+                    B = [obj.randomCoordinates_x(1:a-1) obj.randomCoordinates_y(1:a-1)];
+                    if ~isempty(B)
+                        iterChecker = 1;
+                        while sum(sqrt(sum((A - B).^2,2)) < subunitRadiusPix*2) > 0 % Too close
                             obj.randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
                             obj.randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* settings.rfSizing.zeroPt;
-                            errorTracker = errorTracker + 1;
+                            A = repmat([obj.randomCoordinates_x(a) obj.randomCoordinates_y(a)],a-1,1);
+                            B = [obj.randomCoordinates_x(1:a-1) obj.randomCoordinates_y(1:a-1)];
                             
-                            if errorTracker > 1e4
-                                error('random coordinates unable to generate')
+                            iterChecker = iterChecker + 1;
+                            if iterChecker > 1e4
+                                error('unable to find suitable random coordinates')
                             end
                         end
                     end
                 end
+
+                % For fairness: order by most-likely subunits (center)
+                [~,i] = sort(obj.randomCoordinates_x.^2 + obj.randomCoordinates_y.^2);
+                obj.randomCoordinates_x = obj.randomCoordinates_x(i);
+                obj.randomCoordinates_y = obj.randomCoordinates_y(i);
+                
                 iterations = 2;
             else
                 iterations = 1;

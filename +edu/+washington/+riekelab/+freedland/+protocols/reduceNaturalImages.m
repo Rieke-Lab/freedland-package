@@ -105,6 +105,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
 
             outputMovie = {};
             obj.filename = {};
+            obj.coordinates = {};
             % Refine naturalistic movie
             if obj.showNaturalMovie == true
                 if strcmp(obj.naturalMovieRegion,'center-only')
@@ -236,31 +237,31 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                         if strcmp(obj.experimentSettings,'simple')
                             C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                             [subunitLocationPix_x; subunitLocationPix_y],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            obj.coordinates = cat(2,obj.coordinates,[{C(1,:)},{C(2,:)}]);
+                            obj.coordinates = cat(1,obj.coordinates,[{C(1,:)},{C(2,:)}]); %[ x y ]
                             obj.filename = [obj.filename;{'reduced_all'}]; % Coordinates in microns
                         elseif strcmp(obj.experimentSettings,'add subunits') 
                             C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                             [subunitLocationPix_x(1:a); subunitLocationPix_y(1:a)],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            obj.coordinates = cat(2,obj.coordinates,[{C(1,:)},{C(2,:)}]);
-                            obj.filename = [obj.filename;{strcat('reduced_',mat2str(a),'subunits_',mat2str(co))}]; % Coordinates in microns
+                            obj.coordinates = cat(1,obj.coordinates,[{C(1,:)},{C(2,:)}]); %[ x y ]
+                            obj.filename = [obj.filename;{strcat('reduced_',mat2str(a),'-subunits')}]; % Coordinates in microns
                         end
                     elseif d == 2
                         if strcmp(obj.experimentSettings,'simple')
                             C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                             [randomCoordinates_x'; randomCoordinates_y'],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            obj.coordinates = cat(2,obj.coordinates,[{C(1,:)},{C(2,:)}]);
+                            obj.coordinates = cat(1,obj.coordinates,[{C(1,:)},{C(2,:)}]); %[ x y ]
                             obj.filename = [obj.filename;{'reducedRandomized_all'}]; % Coordinates in microns
                         elseif strcmp(obj.experimentSettings,'add subunits')    
                             C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                             [randomCoordinates_x(1:a)'; randomCoordinates_y(1:a)'],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            obj.coordinates = cat(2,obj.coordinates,[{C(1,:)},{C(2,:)}]);
-                            obj.filename = [obj.filename;{strcat('reducedRandomized_',mat2str(a),'subunits')}]; % Coordinates in microns
+                            obj.coordinates = cat(1,obj.coordinates,[{C(1,:)},{C(2,:)}]); %[ x y ]
+                            obj.filename = [obj.filename;{strcat('reducedRandomized_',mat2str(a),'-subunits')}]; % Coordinates in microns
                         end
                     end
                     outputMovie = [outputMovie;{reducedStimulus(:,:,:,:,a) .* 255}];
                 end
             end
-            
+
             % Export all movies
             obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
             

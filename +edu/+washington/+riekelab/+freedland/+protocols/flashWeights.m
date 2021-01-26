@@ -16,6 +16,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         centerRadius = 100;  % in um
         cuts         = 8;    % number of slices to divide into
         cutLocation  = 'surround-only'; % locations to place cuts
+        includeNegativeContrasts = true; % add negative contrast cases to stimulus
         rotate       = 0;    % degrees to rotate slices
         randomize    = true; % randomize order to present slices
         
@@ -113,9 +114,9 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(size(obj.disks,3));
+                obj.order = randperm(size(obj.intensities,1));
             else
-                obj.order = 1:size(obj.disks,3);
+                obj.order = 1:size(obj.intensities,1);
             end
         end
         
@@ -176,6 +177,11 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         function intensity = prepIntensities(obj)
             
             x = obj.weights';
+            if strcmp(obj.cutLocation,'surround-only')
+                x = x(2:end); % ignore center weight
+            elseif strcmp(obj.cutLocation,'center-only') && length(obj.weights) == obj.cuts+1
+                x = x(1:end-1); % ignore surround weight
+            end
             B = sum(obj.contrast*x);
             
             % A * x = B
@@ -183,22 +189,23 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % infinite possibilities for A. So, we randomly generate a
             % number of givens and solve for the remaining values.
             remainingValues = 1;
-            givens = size(obj.masks,3) - remainingValues;
+            givens = length(x) - remainingValues;
             
             % Randomly generate contrasts
             % ~61% of cases will be unusable at 50% contrast
             % ~97% of cases will be unusable at 25%/75% contrast
             A = rand(round(obj.numberOfStimuli*1000),givens); % Enough for 0.1% usability
             
-            if strcmp(obj.cutLocation,'surround-only')
-                % Centers typically have much higher weight than surround,
-                % skewing statistics. Easier to simply keep static.
-                A(:,1) = obj.contrast;
-            end
-            
             % Solve for remaining contrasts
             A = [A B - A*x(1:givens) / x(givens+1:end)];
             A(sum(A<0,2)>0 | sum(A>1,2)>0,:) = []; % Ensure contrasts are between 0-1
+            
+            % Add static behavior to center/surround as needed
+            if strcmp(obj.cutLocation,'surround-only')
+                A = [repelem(obj.contrast,size(A,1),1), A];
+            elseif strcmp(obj.cutLocation,'center-only') && length(obj.weights) == obj.cuts+1
+                A = [A, repelem(obj.contrast,size(A,1),1)];
+            end
             
             % Add case with uniform disk. If weights are correct, all
             % collections of intensities should elicit the same response.
@@ -207,13 +214,15 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Sanity check
             % round(A * x,2) == round(B,2);
             
-            % Convert intensities to light intensities
-            if strcmp(obj.cellClass,'ON')
-                intensity = (A+1) .* obj.backgroundIntensity;
-            elseif strcmp(obj.cellClass,'OFF')
-                intensity = (1-A) .* obj.backgroundIntensity;
+            if obj.includeNegativeContrasts == true
+                intensity = cat(1,(A+1) .* obj.backgroundIntensity,(1-A) .* obj.backgroundIntensity);
+            else
+                if strcmp(obj.cellClass,'ON')
+                    intensity = (A+1) .* obj.backgroundIntensity;
+                elseif strcmp(obj.cellClass,'OFF')
+                    intensity = (1-A) .* obj.backgroundIntensity;
+                end
             end
-            
         end
         
         function tf = shouldContinuePreparingEpochs(obj)

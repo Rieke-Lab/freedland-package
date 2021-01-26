@@ -10,15 +10,16 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Cell type
         cellClass = 'ON'; % on cell or off cell?
+        weights = [0.5 0.6 0.7 0.75 0.8 0.85 0.9 1]; % integration weight of each region (see: flashRegions)
         
         % Image information
         centerRadius = 100;  % in um
-        centerCuts   = 8;    % number of slices to divide center into
+        cuts         = 8;    % number of slices to divide into
+        cutLocation  = 'surround-only'; % locations to place cuts
         rotate       = 0;    % degrees to rotate slices
         randomize    = true; % randomize order to present slices
         
         % Brightness
-        weights = [0.5 0.6 0.7 0.75 0.8 0.85 0.9 1]; % integration weight of each region (see: flashRegions)
         contrast = 0.25; % 0 to 1
         backgroundIntensity = 0.168; % 0 to 1
         
@@ -33,6 +34,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         cellClassType = symphonyui.core.PropertyType('char', 'row', {'ON', 'OFF'}) 
+        cutLocationType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only','full-field'}) 
         disks
         selections
         order
@@ -59,11 +61,6 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.showFigure('edu.washington.riekelab.freedland.figures.receptiveFieldFitFigure',...
                 obj.rig.getDevice(obj.amp),'preTime',obj.preTime,'stimTime',obj.stimTime,'type','experimentID');
             
-            % Check
-            if length(obj.weights) ~= obj.centerCuts
-                error('nonequal number of weights and regions')
-            end
-            
             % Convert units
             canvasSize = fliplr(obj.rig.getDevice('Stage').getCanvasSize());
             centerRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
@@ -83,10 +80,32 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             %%%
 
             % Build masks
-            rotations = 0:360/obj.centerCuts:360;
-            obj.disks = zeros(size(r,1),size(r,2),obj.centerCuts);
-            for a = 1:obj.centerCuts
-                obj.disks(:,:,a) = (r <= centerRadiusPix) .* (th >= rotations(a) & th < rotations(a+1));
+            rotations = 0:360/obj.cuts:360;
+            obj.disks = zeros(size(r,1),size(r,2),obj.cuts);
+            if strcmp(obj.cutLocation,'center-only') || strcmp(obj.cutLocation,'full-field')
+                m = (r <= centerRadiusPix);
+            elseif strcmp(obj.cutLocation,'surround-only')
+                m = (r > centerRadiusPix) & (r <= max(canvasSize));
+            end
+            
+            % Split into regions
+            for a = 1:obj.cuts
+                obj.disks(:,:,a) = m .* (th >= rotations(a) & th < rotations(a+1));
+            end
+            
+            % Adjust for special cases
+            if strcmp(obj.cutLocation,'surround-only') % Add center disk to mix
+                obj.disks = cat(3,(r <= centerRadiusPix),obj.disks);
+            elseif strcmp(obj.cutLocation,'full-field') % Repeat slices for surround disks
+                m = (r > centerRadiusPix) & (r <= max(canvasSize));
+                extraDisks = zeros(size(r,1),size(r,2),obj.cuts);
+                for a = 1:obj.cuts
+                    extraDisks(:,:,a) = m .* (th >= rotations(a) & th < rotations(a+1));
+                end
+                obj.disks = cat(3,obj.disks,extraDisks);
+            elseif strcmp(obj.cutLocation,'center-only') && length(obj.weights) == obj.cuts+1
+                % Include a surround weight in the mix
+                obj.disks = cat(3,obj.disks,(r > centerRadiusPix) & (r <= max(canvasSize)));
             end
             
             % Calculate intensities parameters
@@ -94,9 +113,9 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(size(obj.intensities,1));
+                obj.order = randperm(size(obj.disks,3));
             else
-                obj.order = 1:size(obj.intensities,1);
+                obj.order = 1:size(obj.disks,3);
             end
         end
         
@@ -124,12 +143,13 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();     
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
 
-            % Set image
-            p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
+            % Identify specific parameters
+            p.setBackgroundColor(obj.backgroundIntensity)  
             specificIntensity = obj.intensities(obj.order(obj.counter+1),:);
             
+            % Build image
             image = zeros(size(obj.disks,1),size(obj.disks,2));
-            for a = 1:obj.centerCuts
+            for a = 1:obj.cuts
                 image = image + obj.disks(:,:,a) .* specificIntensity(a);
             end
             image(sum(obj.disks,3) == 0) = obj.backgroundIntensity;
@@ -163,12 +183,18 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % infinite possibilities for A. So, we randomly generate a
             % number of givens and solve for the remaining values.
             remainingValues = 1;
-            givens = obj.centerCuts - remainingValues;
+            givens = size(obj.masks,3) - remainingValues;
             
             % Randomly generate contrasts
             % ~61% of cases will be unusable at 50% contrast
             % ~97% of cases will be unusable at 25%/75% contrast
-            A = rand(round(obj.numberOfStimuli*100),givens); % Enough for 1% usability
+            A = rand(round(obj.numberOfStimuli*1000),givens); % Enough for 0.1% usability
+            
+            if strcmp(obj.cutLocation,'surround-only')
+                % Centers typically have much higher weight than surround,
+                % skewing statistics. Easier to simply keep static.
+                A(:,1) = obj.contrast;
+            end
             
             % Solve for remaining contrasts
             A = [A B - A*x(1:givens) / x(givens+1:end)];
@@ -176,7 +202,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Add case with uniform disk. If weights are correct, all
             % collections of intensities should elicit the same response.
-            A = [repelem(obj.contrast,obj.centerCuts);A(1:obj.numberOfStimuli-1,:)];
+            A = [repelem(obj.contrast,1,size(obj.masks,3));A(1:obj.numberOfStimuli-1,:)];
             
             % Sanity check
             % round(A * x,2) == round(B,2);

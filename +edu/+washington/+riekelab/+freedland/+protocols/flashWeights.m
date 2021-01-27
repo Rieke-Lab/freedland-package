@@ -10,7 +10,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Cell type
         cellClass = 'ON'; % on cell or off cell?
-        weights = [0.5 0.6 0.7 0.75 0.8 0.85 0.9 1]; % integration weight of each region (see: flashRegions)
+        weights = [0.5 0.6 0.7 0.75 0.8 0.85 0.9 1 1.1]; % integration weight of each region (see: flashRegions)
         
         % Image information
         centerRadius = 100;  % in um
@@ -86,7 +86,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             if strcmp(obj.cutLocation,'center-only') || strcmp(obj.cutLocation,'full-field')
                 m = (r <= centerRadiusPix);
             elseif strcmp(obj.cutLocation,'surround-only')
-                m = (r > centerRadiusPix) & (r <= max(canvasSize));
+                m = (r > centerRadiusPix) & (r <= max(canvasSize/2));
             end
             
             % Split into regions
@@ -98,7 +98,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             if strcmp(obj.cutLocation,'surround-only') % Add center disk to mix
                 obj.disks = cat(3,(r <= centerRadiusPix),obj.disks);
             elseif strcmp(obj.cutLocation,'full-field') % Repeat slices for surround disks
-                m = (r > centerRadiusPix) & (r <= max(canvasSize));
+                m = (r > centerRadiusPix) & (r <= max(canvasSize/2));
                 extraDisks = zeros(size(r,1),size(r,2),obj.cuts);
                 for a = 1:obj.cuts
                     extraDisks(:,:,a) = m .* (th >= rotations(a) & th < rotations(a+1));
@@ -106,7 +106,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.disks = cat(3,obj.disks,extraDisks);
             elseif strcmp(obj.cutLocation,'center-only') && length(obj.weights) == obj.cuts+1
                 % Include a surround weight in the mix
-                obj.disks = cat(3,obj.disks,(r > centerRadiusPix) & (r <= max(canvasSize)));
+                obj.disks = cat(3,obj.disks,(r > centerRadiusPix) & (r <= max(canvasSize/2)));
             end
             
             % Calculate intensities parameters
@@ -150,7 +150,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Build image
             image = zeros(size(obj.disks,1),size(obj.disks,2));
-            for a = 1:obj.cuts
+            for a = 1:size(obj.disks,3)
                 image = image + obj.disks(:,:,a) .* specificIntensity(a);
             end
             image(sum(obj.disks,3) == 0) = obj.backgroundIntensity;
@@ -209,7 +209,7 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Add case with uniform disk. If weights are correct, all
             % collections of intensities should elicit the same response.
-            A = [repelem(obj.contrast,1,size(obj.masks,3));A(1:obj.numberOfStimuli-1,:)];
+            A = [repelem(obj.contrast,1,size(obj.disks,3));A(1:obj.numberOfStimuli-1,:)];
             
             % Sanity check
             % round(A * x,2) == round(B,2);

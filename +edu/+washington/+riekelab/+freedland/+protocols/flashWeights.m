@@ -108,10 +108,10 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 % Include a surround weight in the mix
                 obj.disks = cat(3,obj.disks,(r > centerRadiusPix) & (r <= max(canvasSize/2)));
             end
-            
+
             % Calculate intensities parameters
             obj.intensities = prepIntensities(obj);
-
+            
             obj.counter = 0;
             if obj.randomize == true
                 obj.order = randperm(size(obj.intensities,1));
@@ -182,8 +182,9 @@ classdef flashWeights < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             elseif strcmp(obj.cutLocation,'center-only') && length(obj.weights) == obj.cuts+1
                 x = x(1:end-1); % ignore surround weight
             end
+            x = abs(x / max(abs(x)));
             B = sum(obj.contrast*x);
-            
+
             % A * x = B
             % We have cell weights (x) and total spike counts (B). There are
             % infinite possibilities for A. So, we randomly generate a

@@ -10,6 +10,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         randomize = true; % whether to randomize movies shown
         rawMovieFrequency = 0; % How often should we show the original movie amongst experimental movies? (i.e, 3 = every 3 experimental movies, we show 1 raw movie). Set to 0 to ignore.
         backgroundIntensity = 0.168; % 0 - 1
+        fileFolder = '+movies'; % Folder in freedland-package containing videos
 
         % Additional parameters
         onlineAnalysis = 'extracellular'
@@ -20,6 +21,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        fileFolderType = symphonyui.core.PropertyType('char', 'row', {'+movies', '+additionalMovies'}) 
         sequence
         counter
         imageMatrix
@@ -46,7 +48,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
             % General directory
-            obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies';
+            obj.directory = strcat('Documents/freedland-package/+edu/+washington/+riekelab/+freedland/',obj.fileFolder);
             D = dir(obj.directory);
             
             % Find correct folder

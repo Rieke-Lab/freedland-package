@@ -1,4 +1,5 @@
-% Adapted from MHT's 'area summation figure'
+% Uses F2 frequency from contrastReversingSubunits to identify nonlinear
+% hotspots.
 
 classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
     
@@ -99,6 +100,8 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             % Plot
             figure(20)
             set(gcf,'Position',[100 200 900 280])
+            
+            % F1 frequency
             subplot(1,3,1)
             imagesc(obj.storeF1 ./ obj.storeTracker);
             title('F1')
@@ -107,23 +110,36 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             set(gca, 'XTick', ticks, 'XTickLabel', ticklabels) % in um
             set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
 
+            % F2 frequency
             subplot(1,3,2)
             imagesc(obj.storeF2 ./ obj.storeTracker);
             title('F2')
             set(gca, 'XTick', ticks, 'XTickLabel', ticklabels)
             set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
             
+            %%% Calculate best clusters (ordered from most to least likely).
+            % We perform clustering on F2 only because F2/F1 can be heavily skewed
+            % by poor online F1 measurements.
+            hold on
+            centroid = exportSubunits(obj,obj.storeF2 ./ obj.storeTracker,'subunits-F2'); % [y, x, F2]
+            subunits = 8; % Number of clusters to show on figure (all possible clusters will still export as subunits.csv)
+            if size(centroid,1) > subunits
+                plot(centroid(1:subunits,1)+size(obj.storeRatio,1)/2,centroid(1:subunits,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)
+            else
+                plot(centroid(:,1)+size(obj.storeRatio,1)/2,centroid(:,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)
+            end
+            hold off
+            
             subplot(1,3,3)
-            imagesc(obj.storeRatio);
+            imagesc(obj.storeRatio ./ obj.storeTracker);
             title('F2/F1')
             set(gca, 'XTick', ticks, 'XTickLabel', ticklabels)
             set(gca, 'YTick', ticks, 'YTickLabel', ticklabels)
+            
+            %%% Calculate best clusters (ordered from most to least likely).
             hold on
-
-            % Calculate best clusters (ordered from most to least likely)
-            centroid = exportSubunits(obj); % [y, x, F2/F1]
-            subunits = 8; % Number of clusters to show on figure
-
+            centroid = exportSubunits(obj,obj.storeRatio ./ obj.storeTracker,'subunits-F2_F1_ratio'); % [y, x, F2]
+            subunits = 8; % Number of clusters to show on figure (all possible clusters will still export as subunits.csv)
             if size(centroid,1) > subunits
                 plot(centroid(1:subunits,1)+size(obj.storeRatio,1)/2,centroid(1:subunits,2)+size(obj.storeRatio,2)/2,'ro','LineWidth',3)
             else
@@ -132,18 +148,18 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             hold off
         end
         
-        function centroid = exportSubunits(obj)
-
+        function centroid = exportSubunits(obj,dataset,filename)
+            
             % Find unique values
-            A = sort(unique(obj.storeRatio(:)),'descend'); % Use interpolated sample
+            A = sort(unique(dataset(:)),'descend'); % Use interpolated sample
             A(isnan(A)) = [];
             
             centroid = zeros(size(A,1),3);
-            offset = size(obj.storeRatio,1)/2;
+            offset = size(dataset,1)/2;
             for a = 1:size(A,1)
                 
                 % Calculate x,y centroid for each F2/F1 ratio
-                [x,y] = find(obj.storeRatio == A(a));
+                [x,y] = find(dataset == A(a));
                 centroid(a,:) = [mean(y)-offset, mean(x)-offset, A(a)];
 
                 % Confirm subunits are sufficiently far apart
@@ -156,7 +172,7 @@ classdef contrastReversingSubunitsFigure < symphonyui.core.FigureHandler
             
             % Isolate final subunits
             centroid(centroid(:,1) == Inf,:) = [];
-            csvwrite(strcat('Documents/subunits.csv'),centroid') % Export as csv
+            csvwrite(strcat('Documents/',filename,'.csv'),centroid') % Export as csv
         end
     end
 end

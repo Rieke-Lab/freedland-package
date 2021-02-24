@@ -71,7 +71,7 @@ classdef contrastReversingSubunits < edu.washington.riekelab.protocols.RiekeLabS
        
             % Tile subunit-searching dot locations
             radialDistance = 2 * subunitRadiusPix * (1-obj.samplingOverlap); % Euclidean distance
-            radialCoordinates = 0:radialDistance:centerRadiusPix; % All sampling distances from center
+            radialCoordinates = 0:radialDistance:(centerRadiusPix-subunitRadiusPix); % All sampling distances from center
             obj.opposingDisk = cell(1000,1);
             obj.cartesianCoordinates = zeros(1000,2);
             obj.polarCoordinates = zeros(1000,2);

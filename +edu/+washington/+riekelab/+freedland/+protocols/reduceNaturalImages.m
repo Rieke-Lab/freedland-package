@@ -26,7 +26,7 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
         showNaturalMovie         = true;            % show natural image movie prior to reduced movie
         naturalMovieRegion       = 'center-only';   % specific region to show natural image movie
         showLinearEquivalentDisk = true;            % show reduced movie (single linear equivalent disk)
-        showNaturalDots          = true;            % show sets of movies with only dots containing natural movie.
+        persistentLinearEquivalentDisk = true;      % for dot stimuli, place on top of linear equivalent disk
         randomize                = true;            % display selected movies in random order
 
         % Additional parameters
@@ -72,6 +72,9 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
                 obj.rfSigmaCenter,obj.rfSigmaSurround);
             
+            % Directory to export movies
+            obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
+            
             % Pull base trajectories and image information.
             [path,img] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNo, obj.observerNo);
             
@@ -89,8 +92,8 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             % Calculate receptive field structure
             [RFFilter,settings.rfSizing] = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(settings);
             
-            % Use DOVES eye movements to create movie. Convolve movie with receptive field structure.
-            [convolvedStimulus, rawMov] = edu.washington.riekelab.freedland.videoGeneration.utils.weightedTrajectory(settings, img, RFFilter);
+            % Use DOVES eye movements to create movie.
+            [~, rawMov] = edu.washington.riekelab.freedland.videoGeneration.utils.weightedTrajectory(settings, img, RFFilter);
             
             % Adjust units to DOVES database (units of arcmin)
             subunitRadiusPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
@@ -103,11 +106,9 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             % Identify natural image movie region to show.
             [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
             m = sqrt((xx - settings.videoSize(2)/2).^2 + (yy - settings.videoSize(1)/2).^2);
-
-            outputMovie = {};
+            
             obj.filename = {};
             obj.coordinates = {};
-            
             % Refine naturalistic movie
             if obj.showNaturalMovie == true
                 if strcmp(obj.naturalMovieRegion,'center-only')
@@ -119,34 +120,35 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 end
                 
                 % Only display for desired spatial region.
+                rawMovieExport = zeros(size(rawMov));
                 for a = 1:size(rawMov,4)
-                    rawMov(:,:,1,a) = rawMov(:,:,1,a) .* mask + ~mask .* obj.backgroundIntensity;
+                    rawMovieExport(:,:,1,a) = rawMov(:,:,1,a) .* mask + ~mask .* obj.backgroundIntensity;
                 end
+                
+                % Export
                 obj.filename{1,1} = 'natural';
-                outputMovie{1,1} = rawMov .* 255;
                 obj.coordinates{1,1} = obj.naturalMovieRegion; % x
                 obj.coordinates{1,2} = obj.naturalMovieRegion; % y
+                exportMovie(obj, uint8(rawMovieExport .* 255), obj.filename{1,1});
             end
-            
+
             % Calculate linear equivalent center
             if obj.showLinearEquivalentDisk == true
-                linearEquiv = zeros(size(rawMov));
                 mask = m <= settings.rfSizing.zeroPt; % Identify center
-                for a = 1:size(convolvedStimulus,4)
-                    rawValue = convolvedStimulus(:,:,1,a) .* mask;
-                    rawValue = sum(rawValue(:));
-                    
-                    normalizingValue = RFFilter .* mask;
-                    normalizingValue = sum(normalizingValue(:));
-                    
-                    linearEquiv(:,:,1,a) = mask .* (rawValue ./ normalizingValue) + ~mask .* obj.backgroundIntensity;
+                linearEquiv = calculateLinearEquivalency(rawMov, RFFilter, mask);
+                
+                % Add surround
+                for a = 1:size(linearEquiv,4)
+                    linearEquiv(:,:,1,a) = linearEquiv(:,:,1,a) + ~mask .* obj.backgroundIntensity;
                 end
+                
+                % Export
                 obj.filename{2,1} = 'linearEquivalent';
-                outputMovie{2,1} = linearEquiv .* 255;
                 obj.coordinates{2,1} = 'linearEquivalent'; % x
                 obj.coordinates{2,2} = 'linearEquivalent'; % y
+                exportMovie(obj, uint8(linearEquiv .* 255), obj.filename{2,1});
             end
-            
+
             %%% Build reduced stimulus
             [xx,yy] = meshgrid(1:settings.videoSize(2),1:settings.videoSize(1));
             
@@ -157,8 +159,8 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                 
                 for a = 1:length(randomCoordinates_x)
                     % Dot cannot exceed center
-                    randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix);
-                    randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix);
+                    randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix .* 2);
+                    randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix .* 2);
                     
                     % Confirm subunit is sufficiently far away from others
                     A = repmat([randomCoordinates_x(a) randomCoordinates_y(a)],a-1,1);
@@ -166,8 +168,8 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                     if ~isempty(B)
                         iterChecker = 1;
                         while sum(sqrt(sum((A - B).^2,2)) < subunitRadiusPix*2) > 0 % Too close
-                            randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix);
-                            randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix);
+                            randomCoordinates_x(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix .* 2);
+                            randomCoordinates_y(a) = (rand() - 0.5) .* 2 .* (settings.rfSizing.zeroPt - subunitRadiusPix .* 2);
                             A = repmat([randomCoordinates_x(a) randomCoordinates_y(a)],a-1,1);
                             B = [randomCoordinates_x(1:a-1) randomCoordinates_y(1:a-1)];
                             
@@ -191,19 +193,8 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
             tic
             % Build reduced representations
             for d = 1:iterations
-                subunitMaskTracker = zeros([size(xx) length(subunitLocationPix_x)]);
-                
-                % Whether to produce one movie or multiple movies
-                if strcmp(obj.experimentSettings,'simple')
-                    reducedStimulus = zeros(size(convolvedStimulus));
-                elseif strcmp(obj.experimentSettings,'add subunits')
-                    reducedStimulus = zeros([size(convolvedStimulus),length(subunitLocationPix_x)]);
-                end
-                
-                if obj.showNaturalDots == true
-                    naturalReducedStimulus = reducedStimulus;
-                end
-                
+                iterVideo = zeros(size(rawMov));
+                iterMask = zeros(size(xx));
                 for a = 1:length(subunitLocationPix_x)
                     % Build a mask for each subunit
                     if d == 1 % Desired coordinates
@@ -214,113 +205,106 @@ classdef reduceNaturalImages < edu.washington.riekelab.protocols.RiekeLabStagePr
                         yCoord = settings.videoSize(1)/2 + randomCoordinates_y(a);
                     end
                     subunitMask = sqrt((xx - xCoord).^2 + (yy - yCoord).^2) <= subunitRadiusPix;
-                    subunitMaskTracker(:,:,a) = subunitMask;
-
-                    % Integrate each frame using linear-equivalent disk
-                    normalizingValue = RFFilter .* subunitMask;
-                    normalizingValue = sum(normalizingValue(:)); % RF * mask
-                    for b = 1:size(rawMov,4)
-                        rawValue = convolvedStimulus(:,:,1,b) .* subunitMask;
-                        rawValue = sum(rawValue(:)); % RF * image * mask
-
-                        % Add each frame
-                        if strcmp(obj.experimentSettings,'simple')
-                            reducedStimulus(:,:,1,b) = reducedStimulus(:,:,1,b) + subunitMask .* (rawValue / normalizingValue);
-                            if obj.showNaturalDots == true
-                                naturalReducedStimulus(:,:,1,b) = naturalReducedStimulus(:,:,1,b) + subunitMask .* rawMov(:,:,1,b);
-                            end
-                        elseif strcmp(obj.experimentSettings,'add subunits')
-                            for c = a:length(subunitLocationPix_x)
-                                reducedStimulus(:,:,1,b,c) = reducedStimulus(:,:,1,b,c) + subunitMask .* (rawValue / normalizingValue);
-                                if obj.showNaturalDots == true
-                                    naturalReducedStimulus(:,:,1,b,c) = naturalReducedStimulus(:,:,1,b,c) + subunitMask .* rawMov(:,:,1,b);
-                                end
-                            end
-                        end
-                    end
-                end
-                
-                % Average overlapping regions
-                for c = 1:length(subunitLocationPix_x)
-                    reducedStimulus(:,:,:,:,c) = reducedStimulus(:,:,:,:,c) ./ repmat(sum(subunitMaskTracker(:,:,1:c),3),1,1,1,size(reducedStimulus,4)); % For overlapping subunits: average results
-                    if obj.showNaturalDots == true
-                        naturalReducedStimulus(:,:,:,:,c) = naturalReducedStimulus(:,:,:,:,c) ./ repmat(sum(subunitMaskTracker(:,:,1:c),3),1,1,1,size(naturalReducedStimulus,4));
-                    end
-                end
-                reducedStimulus(isnan(reducedStimulus)) = obj.backgroundIntensity;
-                if obj.showNaturalDots == true
-                    naturalReducedStimulus(isnan(naturalReducedStimulus)) = obj.backgroundIntensity;
-                end
-
-                for a = 1:size(reducedStimulus,5)
-                    if d == 1
-                        if strcmp(obj.experimentSettings,'simple')
-                            C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                            [subunitLocationPix_x; subunitLocationPix_y],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            specificFilename = 'reduced_all';
-                        elseif strcmp(obj.experimentSettings,'add subunits') 
-                            C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                            [subunitLocationPix_x(1:a); subunitLocationPix_y(1:a)],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            specificFilename = strcat('reduced_',mat2str(a),'-subunits'); % Coordinates in microns
-                        end
-                    elseif d == 2
-                        if strcmp(obj.experimentSettings,'simple')
-                            C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                            [randomCoordinates_x'; randomCoordinates_y'],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            specificFilename = 'reducedRandomized_all'; % Coordinates in microns
-                        elseif strcmp(obj.experimentSettings,'add subunits')    
-                            C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                            [randomCoordinates_x(1:a)'; randomCoordinates_y(1:a)'],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
-                            specificFilename = strcat('reducedRandomized_',mat2str(a),'-subunits'); % Coordinates in microns
-                        end
-                    end
-                    obj.filename = [obj.filename;{specificFilename}]; % Coordinates in microns
-                    obj.coordinates = cat(1,obj.coordinates,[{C(1,:)},{C(2,:)}]); %[ x y ]
-                    outputMovie = [outputMovie;{reducedStimulus(:,:,:,:,a) .* 255}];
+                    iterMask = iterMask + subunitMask;
                     
-                    if obj.showNaturalDots == true
+                    % Create dot stimulus
+                    tempMask = [];
+                    if strcmp(obj.experimentSettings,'add subunits')
+                        tempMask = subunitMask;
+                        iterVideo = iterVideo + calculateLinearEquivalency(rawMov, RFFilter, tempMask);
+                        linearEquiv = iterVideo;
+                    elseif (strcmp(obj.experimentSettings,'simple') && a == length(subunitLocationPix_x))
+                        tempMask = iterMask;
+                        linearEquiv = calculateLinearEquivalency(rawMov, RFFilter, tempMask);
+                    end
+                    
+                    if ~isempty(tempMask)
+                        % Add linear equivalent center
+                        if obj.persistentLinearEquivalentDisk == true
+                            tempMask = m <= settings.rfSizing.zeroPt;
+                            linearEquiv = linearEquiv + calculateLinearEquivalency(rawMov, RFFilter, ~iterMask .* tempMask);
+                        end
+
+                        % Add surround
+                        for b = 1:size(linearEquiv,4)
+                            linearEquiv(:,:,1,b) = linearEquiv(:,:,1,b) + ~tempMask .* obj.backgroundIntensity;
+                        end
+
+                        % Adjust for overlapping dots
+                        tempMask(tempMask == 0) = 1;
+                        linearEquiv = linearEquiv ./ repmat(tempMask,1,1,1,size(linearEquiv,4));
+
+                        % Adjust metadata
+                        if d == 1; % Desired coordinates
+                            specificFilename = strcat('reduced_',mat2str(a),'-subunits');
+                            C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                                [subunitLocationPix_x(1:a); subunitLocationPix_y(1:a)],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
+                        elseif d == 2 % Random coordinates
+                            specificFilename = strcat('reducedRandomized_',mat2str(a),'-subunits');
+                            C = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                                [randomCoordinates_x(1:a)'; randomCoordinates_y(1:a)'],obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2um'),1);
+                        end
+                        obj.filename = [obj.filename;{specificFilename}]; % Coordinates in microns
                         obj.coordinates = cat(1,obj.coordinates,[{C(1,:)},{C(2,:)}]); %[ x y ]
-                        obj.filename = [obj.filename;{strcat('naturalDot-',specificFilename)}];
-                        outputMovie = [outputMovie;{naturalReducedStimulus(:,:,:,:,a) .* 255}];
+                        exportMovie(obj, uint8(linearEquiv .* 255), specificFilename);
                     end
                 end
             end
             toc
-            
-            % Export all movies
-            obj.directory = 'Documents/freedland-package/+edu/+washington/+riekelab/+freedland/+movies/';
-            
-            % Add pre-time and post-time manually
-            refreshRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
-            blankFrames = ones(size(reducedStimulus(:,:,1,1))) .* 255 .* obj.backgroundIntensity;
-            preFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.preTime/1e3)));
-            postFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.tailTime/1e3)));
 
-            disp('Exporting movies...')
-            for a = 1:length(outputMovie)
-                if ~isempty(outputMovie{a,1})
-                    specificMov = uint8(cat(4,preFrames,outputMovie{a,1},postFrames));
-                    
-                    % Export movies
-                    v = VideoWriter(strcat(obj.directory,obj.filename{a,1}),'Uncompressed AVI');
-                    v.FrameRate = refreshRate;
-                    
-                    open(v)
-                    for b = 1:size(specificMov,4)
-                        writeVideo(v,specificMov(:,:,1,b));
-                    end
-                    close(v)
-                end
-            end
-            
+            % Track metadata
             obj.counter = 0;
             obj.order = repmat(1:length(obj.filename),1,obj.numberOfAverages);
             if obj.randomize == true
                 obj.order = obj.order(randperm(length(obj.order)));
             end
             
+            % Estimate stimulus time
             t = length(obj.order) .* ((obj.preTime+obj.stimTime+obj.tailTime)/1000 + 1.5) / 60; % in minutes
             disp(strcat('Estimated stimulus time (+1.5 sec delay): ',mat2str(round(t,1)),'min.'))
+            
+            function adjMovie = calculateLinearEquivalency(rawMovie, receptiveFieldFilter, regionalMask)
+
+                % Calculates linear equivalent version of a raw movie according
+                % to mask
+                adjMovie = zeros(size(rawMovie));
+
+                % RF * mask
+                normVal = receptiveFieldFilter .* regionalMask;
+                normVal = sum(normVal(:));
+                
+                for z = 1:size(rawMovie,4)
+                    % img * RF * mask
+                    rawVal = rawMovie(:,:,1,z) .* receptiveFieldFilter .* regionalMask;
+                    rawVal = sum(rawVal(:));
+                    
+                    % (img * RF * mask) / (RF * mask)
+                    adjMovie(:,:,1,z) = adjMovie(:,:,1,z) + regionalMask .* (rawVal ./ normVal);
+                end
+            end
+        end
+
+        function exportMovie(obj, movieFile, filename)
+            
+            refreshRate = obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate');
+            
+            % Append blank frames for preTime/tailTime
+            blankFrames = ones(size(movieFile(:,:,1,1))) .* 255 .* obj.backgroundIntensity;
+            preFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.preTime/1e3)));
+            postFrames = repmat(blankFrames,1,1,1,round(refreshRate * (obj.tailTime/1e3)));
+
+            % Append last frame
+            lastFrame = repmat(movieFile(:,:,1,end),1,1,1,round(refreshRate * (obj.stimTime/1e3)) - size(movieFile,4));
+            movieExport = uint8(cat(4,preFrames,movieFile,lastFrame,postFrames));
+                    
+            % Export movies
+            v = VideoWriter(strcat(obj.directory,filename),'Uncompressed AVI');
+            v.FrameRate = refreshRate;
+            open(v)
+            for b = 1:size(movieExport,4)
+                writeVideo(v,movieExport(:,:,1,b));
+            end
+            close(v)
         end
         
         function prepareEpoch(obj, epoch)

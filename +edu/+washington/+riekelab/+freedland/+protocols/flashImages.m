@@ -12,8 +12,10 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         region = 'full-field'; % where to display image
         
         % Natural image
-        imageNo = [5,5,12,12,71,71,73,73,79,79,81,81,100,100];              % natural image number (1 to 101)
-        frame = [532,471,458,608,900,714,681,946,252,513,678,64,593,779];   % frame # according to DOVES database. (1 to ~1000).
+        imageNo = [5,9,2,18,100,56,77,42,56,42,2,78,71,100,6,...
+            100,14,89,96,7,70,78,81,2,64,5,56,2,81,5,55,96,71];              % natural image number (1 to 101)
+        frame = [190,426,957,797,593,550,207,274,943,376,124,298,440,779,603,...
+            357,286,222,171,232,518,259,678,556,437,251,943,621,440,532,629,208,356];   % frame # according to DOVES database. (1 to ~1000).
         observerNo = 1;                                                     % observer number (1 to 19).
         randomize = true;  % randomize each rotation
 

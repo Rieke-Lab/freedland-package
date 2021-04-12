@@ -3,23 +3,29 @@
 classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
-        preTime = 250 % in ms
-        stimTime = 250 % in ms
-        tailTime = 250 % in ms
+        preTime     = 250 % in ms
+        stimTime    = 250 % in ms
+        tailTime    = 250 % in ms
         
         % Region of image to be shown
-        maskRadius = 100;  % in um. Places mask over surrounding portion of image.
-        region = 'full-field'; % where to display image
+        maskRadius  = 1000;  % in um. Places mask over surrounding portion of image.
+        region      = 'full-field'; % where to display image
         
-        % Natural image
-        imageNo = [5,9,2,18,100,56,77,42,56,42,2,78,71,100,6,...
-            100,14,89,96,7,70,78,81,2,64,5,56,2,81,5,55,96,71];              % natural image number (1 to 101)
-        frame = [190,426,957,797,593,550,207,274,943,376,124,298,440,779,603,...
-            357,286,222,171,232,518,259,678,556,437,251,943,621,440,532,629,208,356];   % frame # according to DOVES database. (1 to ~1000).
-        observerNo = 1;                                                     % observer number (1 to 19).
-        randomize = true;  % randomize each rotation
+        % Natural image information
+        imageNo     = [5,9,2,18,100,56,77,42,56,42,2,78,71,100,6,...
+                        100,14,89,96,7,70,78,81,2,64,5,56,2,81,5,55,96,71];  % natural image number (1 to 101)
+        frame       = [190,426,957,797,593,550,207,274,943,376,124,298,440,779,603,...
+                        357,286,222,171,232,518,259,678,556,437,251,943,621,440,532,629,208,356]; % frame # according to DOVES database. (1 to ~1000).
+        observerNo  = 1; % observer number (1 to 19).
+        backgroundIntensity = 0.168; % common luminance to hold images at.
+        
+        % Reduce image appropriately
+        includeReducedImages    = true;  % randomize each rotation
+        rfSigmaCenter           = 50;    % receptive-field center (only needed if reducing images)
+        rfSigmaSurround         = 160;  % receptive-field surround (only needed if reducing images)
 
         % Additional parameters
+        randomize   = true;  % randomize order of flashed images
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(3) % number of epochs to queue
         amp % Output amplifier
@@ -29,8 +35,8 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         regionType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only', 'full-field'}) 
-        backgroundIntensity
         imageDatabase
+        tracker
         counter
         order
     end
@@ -60,6 +66,28 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % Use DOVES database to identify images along trajectory
             imageFrame = findImage(obj);
             obj.imageDatabase = uint8(imageFrame);
+            obj.tracker = repmat({'image'},size(imageFrame,4),1);
+            
+            if obj.includeReducedImages == true
+                % Load generic settings
+                settings = edu.washington.riekelab.freedland.videoGeneration.demoUtils.loadSettings(...
+                    obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),...
+                    obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'),...
+                    obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
+                    obj.rfSigmaCenter,obj.rfSigmaSurround);
+                
+                % Specific settings for reducing image
+                settings.diskRegions = settings.diskRadii([1 3 5]); % Place one disk between regions [1] and [3]
+                settings.meanDisks   = [1 2];                    % Make disk a linear-equivalent projection
+                settings.slices      = 8;
+                settings.sliceDisks  = [1 2];                    % Apply slicing to our single disk
+                settings.backgroundIntensity = obj.backgroundIntensity;
+                
+                RFFilter = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(settings);
+                projection = edu.washington.riekelab.freedland.videoGeneration.utils.linearEquivalency(settings, imageFrame .* RFFilter, RFFilter, imageFrame);
+                obj.imageDatabase = cat(4,obj.imageDatabase,uint8(projection));
+                obj.tracker = cat(1,obj.tracker,repmat({'reduced'},size(projection,4),1));
+            end
 
             % Setup display
             obj.counter = 0;
@@ -78,9 +106,9 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             epoch.addParameter('imageDisplayed',obj.imageNo(obj.order(obj.counter+1)));
             epoch.addParameter('frameDisplayed',obj.frame(obj.order(obj.counter+1)));
+            epoch.addParameter('flashType',obj.tracker{obj.order(obj.counter+1),1});
             
             % Add metadata from Stage, makes analysis easier.
             epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
@@ -101,9 +129,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Prep to display image
             scene = stage.builtin.stimuli.Image(specificImage);
-            sz = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                size(specificImage,1),obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix');
-            scene.size = [sz sz];
+            scene.size = [canvasSize(1),canvasSize(2)];
             p0 = canvasSize/2;
             scene.position = p0;
             
@@ -132,29 +158,29 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             elseif strcmp(obj.region,'full-field')
                 mask = stage.core.Mask.createCircularAperture(1, 1024);
             end
-            
             aperture.setMask(mask);
             p.addStimulus(aperture);
             obj.counter = mod(obj.counter + 1,length(obj.order));
         end
         
-        function imageFrame = findImage(obj)
+        function [imageFrame,backgroundIntensities] = findImage(obj)
             
             % Relevant frame size
-            canvasSize = obj.rig.getDevice('Stage').getCanvasSize();   
+            canvasSize = obj.rig.getDevice('Stage').getCanvasSize() / 2; % radius  
             pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(max(canvasSize),...
                 obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2arcmin'));
 
-            imageFrame = zeros(pixelRange*2+1,pixelRange*2+1,1,length(obj.imageNo));
+            imageFrame = zeros(pixelRange(2)*2+1,pixelRange(1)*2+1,1,length(obj.imageNo));
+            backgroundIntensities = zeros(length(obj.imageNo),1);
             for a = 1:length(obj.imageNo)
                 [path, image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNo(a), 1);
                 image = image./max(image(:));
-                obj.backgroundIntensity = mean(image(:));
+                backgroundIntensities(a) = mean(image(:));
                 image = image.*255;      
 
                 % Pull image
-                imageFrame(:,:,1,a) = image(path.y(obj.frame(a))-pixelRange:path.y(obj.frame(a))+pixelRange,...
-                    path.x(obj.frame(a))-pixelRange:path.x(obj.frame(a))+pixelRange);
+                imageFrame(:,:,1,a) = image(path.y(obj.frame(a))-pixelRange(2):path.y(obj.frame(a))+pixelRange(2),...
+                    path.x(obj.frame(a))-pixelRange(1):path.x(obj.frame(a))+pixelRange(1));
             end
         end
         

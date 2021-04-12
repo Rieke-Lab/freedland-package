@@ -8,6 +8,7 @@ function [path, im, saccades, fixations] = pathDOVES(imageNo, observerNo)
     % Load DOVES information from directory
     imageString = num2str(imageNo);
     directory = 'freedland-package\+edu\+washington\+riekelab\+freedland\+images\';
+%     directory = '+edu/+washington/+riekelab/+freedland/+images/'; % For offline testing
     while size(imageString,2) < 3
         imageString = strcat('0',imageString);
     end

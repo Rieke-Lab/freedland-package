@@ -39,6 +39,8 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         tracker
         counter
         order
+        imageTracker
+        frameTracker
     end
 
     methods
@@ -67,7 +69,9 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             imageFrame = findImage(obj);
             obj.imageDatabase = uint8(imageFrame);
             obj.tracker = repmat({'image'},size(imageFrame,4),1);
-            
+            obj.imageTracker = obj.imageNo;
+            obj.frameTracker = obj.frame;
+
             if obj.includeReducedImages == true
                 % Load generic settings
                 settings = edu.washington.riekelab.freedland.videoGeneration.demoUtils.loadSettings(...
@@ -81,20 +85,23 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 settings.meanDisks   = [1 2];                    % Make disk a linear-equivalent projection
                 settings.slices      = 8;
                 settings.sliceDisks  = [1 2];                    % Apply slicing to our single disk
-                settings.backgroundIntensity = obj.backgroundIntensity;
+                settings.backgroundIntensity = obj.backgroundIntensity*255;
                 
                 RFFilter = edu.washington.riekelab.freedland.videoGeneration.rfUtils.calculateFilter(settings);
-                projection = edu.washington.riekelab.freedland.videoGeneration.utils.linearEquivalency(settings, imageFrame .* RFFilter, RFFilter, imageFrame);
+                convolvedImage = imageFrame .* repmat(RFFilter,1,1,1,size(imageFrame,4));
+                projection = edu.washington.riekelab.freedland.videoGeneration.utils.linearEquivalency(settings, convolvedImage, RFFilter, imageFrame);
                 obj.imageDatabase = cat(4,obj.imageDatabase,uint8(projection));
                 obj.tracker = cat(1,obj.tracker,repmat({'reduced'},size(projection,4),1));
+                obj.imageTracker = cat(2,obj.imageNo,obj.imageNo);
+                obj.frameTracker = cat(2,obj.frame,obj.frame);
             end
 
             % Setup display
             obj.counter = 0;
             if obj.randomize == true
-                obj.order = randperm(length(obj.imageNo));
+                obj.order = randperm(size(obj.imageDatabase,4));
             else
-                obj.order = 1:length(obj.imageNo);
+                obj.order = 1:size(obj.imageDatabase,4);
             end
         end
         
@@ -106,8 +113,8 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            epoch.addParameter('imageDisplayed',obj.imageNo(obj.order(obj.counter+1)));
-            epoch.addParameter('frameDisplayed',obj.frame(obj.order(obj.counter+1)));
+            epoch.addParameter('imageDisplayed',obj.imageTracker(obj.order(obj.counter+1)));
+            epoch.addParameter('frameDisplayed',obj.frameTracker(obj.order(obj.counter+1)));
             epoch.addParameter('flashType',obj.tracker{obj.order(obj.counter+1),1});
             
             % Add metadata from Stage, makes analysis easier.
@@ -164,10 +171,9 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         end
         
         function [imageFrame,backgroundIntensities] = findImage(obj)
-            
             % Relevant frame size
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize() / 2; % radius  
-            pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(max(canvasSize),...
+            pixelRange = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(canvasSize,...
                 obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'pix2arcmin'));
 
             imageFrame = zeros(pixelRange(2)*2+1,pixelRange(1)*2+1,1,length(obj.imageNo));

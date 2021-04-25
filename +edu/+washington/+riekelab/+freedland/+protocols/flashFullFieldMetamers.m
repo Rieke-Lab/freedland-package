@@ -10,6 +10,7 @@ classdef flashFullFieldMetamers < edu.washington.riekelab.protocols.RiekeLabStag
         % Cell information
         rfSigmaCenter   = 50; % (um) enter from difference of gaussians fit for overlaying receptive field.
         rfSigmaSurround = 160; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        cellClass       = 'on'; % on or off cell
         
         % image info
         slices            = 8; % number of uniform slices
@@ -22,14 +23,15 @@ classdef flashFullFieldMetamers < edu.washington.riekelab.protocols.RiekeLabStag
         % Additional parameters
         backgroundIntensity = 0.168; % 0 - 1 
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(3) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        regionStyleType = symphonyui.core.PropertyType('char', 'row', {'invertAdjacent', 'uniform'}) 
+        regionStyleType = symphonyui.core.PropertyType('char', 'row', {'invertAdjacent', 'uniform','invertAdjacentSurround'}) 
+        cellClassType = symphonyui.core.PropertyType('char', 'row', {'on', 'off'})
         imageDatabase
         counter
         order
@@ -71,9 +73,15 @@ classdef flashFullFieldMetamers < edu.washington.riekelab.protocols.RiekeLabStag
             
             % Generate intensity values
             regionalBehavior = ones(1,obj.slices*2);
+            if strcmp(obj.cellClass,'off')
+                regionalBehavior = regionalBehavior .* -1;
+            end
+            
             if strcmp(obj.regionStyle,'invertAdjacent')
-                regionalBehavior(1:2:obj.slices) = -1;
-                regionalBehavior(obj.slices+2:2:obj.slices*2) = -1;
+                regionalBehavior(1:2:obj.slices) = regionalBehavior(1:2:obj.slices) .* -1;
+                regionalBehavior(obj.slices+2:2:obj.slices*2) = regionalBehavior(obj.slices+2:2:obj.slices*2) .* -1;
+            elseif strcmp(obj.regionStyle,'invertAdjacentSurround')
+                regionalBehavior(obj.slices+2:2:obj.slices*2) = regionalBehavior(obj.slices+2:2:obj.slices*2) .* -1;
             end
             
             stimulus.values = zeros(obj.slices*2,length(obj.centerContrasts)*length(obj.surroundContrasts));

@@ -1,22 +1,22 @@
 % Flash rotated naturalistic images.
 % By J. Freedland, 2019.
-classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef flashFullFieldMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
-        preTime = 250 % in ms
+        preTime  = 250 % in ms
         stimTime = 250 % in ms
         tailTime = 250 % in ms
         
         % Cell information
-        rfSigmaCenter = 50; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaCenter   = 50; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaSurround = 160; % (um) enter from difference of gaussians fit for overlaying receptive field.
         
         % image info
-        slices              = 8; % number of slices
-        contrast            = 0.5; % 0 - 1
-        randomize           = true;
-        includeProjections  = true; % double stimulus time by including uniform projections.
-        
+        slices            = 8; % number of slices
+        centerContrasts   = [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9]; % 0 - 1
+        surroundContrasts = [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9]; % 0 - 1
+        regionStyle       = 'invertAdjacent';
+        randomize         = true;
         backgroundIntensity = 0.168; % 0 - 1 
 
         % Additional parameters
@@ -28,6 +28,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        regionStyleType = symphonyui.core.PropertyType('char', 'row', {'invertAdjacent', 'uniform'}) 
         imageDatabase
         counter
         order
@@ -61,13 +62,29 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
                 obj.rfSigmaCenter,obj.rfSigmaSurround);
             retinalMetamers.slices              = obj.slices;
-            retinalMetamers.sliceDisks          = 1;
-            retinalMetamers.metamerDisks        = 1;
+            retinalMetamers.sliceDisks          = [1 2];
+            retinalMetamers.metamerDisks        = [1 2];
             retinalMetamers.imageNo             = 0;
-            retinalMetamers.diskRegions = retinalMetamers.diskRadii([1 3]); % Place one disk between regions [1] and [3]
+            retinalMetamers.diskRegions = retinalMetamers.diskRadii([1 3 5]); % Place one disk between regions [1] and [3]
             retinalMetamers.backgroundIntensity = obj.backgroundIntensity .* 255;
             
             % Generate intensity values
+            regionalBehavior = ones(1,obj.slices*2);
+            if strcmp(obj.regionStyle,'invertAdjacent')
+                regionalBehavior(1:2:obj.slices) = -1;
+                regionalBehavior(obj.slices+2:2:obj.slices*2) = -1;
+            end
+            
+            stimulus.values = zeros(obj.slices*2,length(obj.centerContrasts)*length(obj.surroundContrasts));
+            tmpCounter = 1;
+            for a = 1:length(obj.centerContrasts)
+                for b = 1:length(obj.surroundContrasts)
+                    stimulus.values(:,tmpCounter) = [regionalBehavior .* obj.centerContrasts(a), regionalBehavior .* obj.surroundContrasts(b)];
+                    stimulus.values(:,tmpCounter) = stimulus.values(:,tmpCounter) .* obj.backgroundIntensity + obj.backgroundIntensity;
+                    tmpCounter = tmpCounter+1;
+                end
+            end
+            
             A = nchoosek(1:obj.slices,round(obj.slices/2));
             diskContrasts = ones(8,size(A,1)) * -obj.contrast;
             obj.stimulusValues = ones(8,size(A,1)) * -1;

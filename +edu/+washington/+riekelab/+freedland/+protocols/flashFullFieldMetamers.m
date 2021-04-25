@@ -1,25 +1,26 @@
 % Flash rotated naturalistic images.
 % By J. Freedland, 2019.
-classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef flashFullFieldMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties
         % Stimulus timing
-        preTime = 250 % in ms
+        preTime  = 250 % in ms
         stimTime = 250 % in ms
         tailTime = 250 % in ms
         
         % Cell information
-        rfSigmaCenter = 50; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaCenter   = 50; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        rfSigmaSurround = 160; % (um) enter from difference of gaussians fit for overlaying receptive field.
         
         % image info
-        slices              = 8; % number of slices
-        contrast            = 0.5; % 0 - 1
-        randomize           = true;
-        includeProjections  = true; % double stimulus time by including uniform projections.
-        
-        backgroundIntensity = 0.168; % 0 - 1 
+        slices            = 8; % number of uniform slices
+        centerContrasts   = [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9]; % 0 - 1
+        surroundContrasts = [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9]; % 0 - 1
+        regionStyle       = 'invertAdjacent'; % whether to invert contrast across regions
+        randomize         = true;
+        includeProjections = false; % include low-dimensional projections in set with metamers
 
         % Additional parameters
+        backgroundIntensity = 0.168; % 0 - 1 
         onlineAnalysis = 'extracellular'
         numberOfAverages = uint16(3) % number of epochs to queue
         amp % Output amplifier
@@ -28,6 +29,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        regionStyleType = symphonyui.core.PropertyType('char', 'row', {'invertAdjacent', 'uniform'}) 
         imageDatabase
         counter
         order
@@ -61,21 +63,29 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'),...
                 obj.rfSigmaCenter,obj.rfSigmaSurround);
             retinalMetamers.slices              = obj.slices;
-            retinalMetamers.sliceDisks          = 1;
-            retinalMetamers.metamerDisks        = 1;
+            retinalMetamers.sliceDisks          = [1 2];
+            retinalMetamers.metamerDisks        = [1 2];
             retinalMetamers.imageNo             = 0;
-            retinalMetamers.diskRegions = retinalMetamers.diskRadii([1 3]); % Place one disk between regions [1] and [3]
+            retinalMetamers.diskRegions = retinalMetamers.diskRadii([1 3 5]); % Place one disk between regions [1] and [3]
             retinalMetamers.backgroundIntensity = obj.backgroundIntensity .* 255;
             
             % Generate intensity values
-            A = nchoosek(1:obj.slices,round(obj.slices/2));
-            diskContrasts = ones(8,size(A,1)) * -obj.contrast;
-            obj.stimulusValues = ones(8,size(A,1)) * -1;
-            for a = 1:size(A,1)
-                diskContrasts(A(a,:),a) = obj.contrast;
-                obj.stimulusValues(A(a,:),a) = 1;
+            regionalBehavior = ones(1,obj.slices*2);
+            if strcmp(obj.regionStyle,'invertAdjacent')
+                regionalBehavior(1:2:obj.slices) = -1;
+                regionalBehavior(obj.slices+2:2:obj.slices*2) = -1;
             end
-            stimulus.values = obj.backgroundIntensity*255 + (diskContrasts .* (obj.backgroundIntensity*255));
+            
+            stimulus.values = zeros(obj.slices*2,length(obj.centerContrasts)*length(obj.surroundContrasts));
+            tmpCounter = 1;
+            for a = 1:length(obj.centerContrasts)
+                for b = 1:length(obj.surroundContrasts)
+                    stimulus.values(:,tmpCounter) = [regionalBehavior(1:obj.slices) .* obj.centerContrasts(a), regionalBehavior(obj.slices+1:obj.slices*2) .* obj.surroundContrasts(b)];
+                    stimulus.values(:,tmpCounter) = stimulus.values(:,tmpCounter) .* obj.backgroundIntensity + obj.backgroundIntensity;
+                    tmpCounter = tmpCounter+1;
+                end
+            end
+            stimulus.values = stimulus.values * 255;
 
             %%% Make metamers
             % Pull cell-specific receptive field
@@ -99,7 +109,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             if obj.includeProjections == true
                 obj.imageDatabase = cat(3,obj.imageDatabase,uint8(squeeze(output.metamerProjection)));
                 obj.stimulusValues = [obj.stimulusValues obj.stimulusValues];
-                obj.imageID = [obj.imageID; repelem({'projection'},size(obj.imageDatabase,3),1)];;
+                obj.imageID = [obj.imageID; repelem({'projection'},size(obj.imageDatabase,3),1)];
             end
             toc
             %%%
@@ -122,9 +132,7 @@ classdef flashMetamers < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
-            G  = obj.stimulusValues(:,obj.order(obj.counter+1))';
-            epoch.addParameter('diskIntensity',G);
-            epoch.addParameter('experimentID',sum(find(G == 1)));
+            epoch.addParameter('diskIntensity',obj.stimulusValues(:,obj.order(obj.counter+1))');
             epoch.addParameter('imageType',obj.imageID{obj.order(obj.counter+1),1});
             
             % Add metadata from Stage, makes analysis easier.

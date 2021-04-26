@@ -113,6 +113,7 @@ classdef flashFullFieldMetamers < edu.washington.riekelab.protocols.RiekeLabStag
             output = edu.washington.riekelab.freedland.videoGeneration.metamerUtils.findReplacements(retinalMetamers,stimulus,databaseValues,databaseTraj);
             obj.imageDatabase = uint8(squeeze(output.metamer));
             obj.imageID = repelem({'metamer'},size(obj.imageDatabase,3),1);
+            obj.stimulusValues = output.metamerValues; % True reduced values of metamer
             
             if obj.includeProjections == true
                 obj.imageDatabase = cat(3,obj.imageDatabase,uint8(squeeze(output.metamerProjection)));

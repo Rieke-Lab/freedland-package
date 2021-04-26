@@ -12,11 +12,8 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         region      = 'full-field'; % where to display image
         
         % Natural image information
-        imageNo     = [5,9,2,18,100,56,77,42,56,42,2,78,71,100,6,...
-                        100,14,89,96,7,70,78,81,2,64,5,56,2,81,5,55,96,71];  % natural image number (1 to 101)
-        frame       = [190,426,957,797,593,550,207,274,943,376,124,298,440,779,603,...
-                        357,286,222,171,232,518,259,678,556,437,251,943,621,440,532,629,208,356]; % frame # according to DOVES database. (1 to ~1000).
-        observerNo  = 1; % observer number (1 to 19).
+        cellPolarity = 'on'; % on- or off-pathway
+        rectificationBias   = 'all'; % flash images with rectification only in the center, surround, or both. Select "all" to sample all three.
         backgroundIntensity = 0.168; % common luminance to hold images at.
         
         % Reduce image appropriately
@@ -27,7 +24,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         % Additional parameters
         randomize   = true;  % randomize order of flashed images
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(3) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
     end
     
@@ -35,6 +32,10 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
         regionType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only', 'full-field'}) 
+        cellPolarityType = symphonyui.core.PropertyType('char', 'row', {'on', 'off'}) 
+        rectificationBiasType = symphonyui.core.PropertyType('char', 'row', {'center','surround','full-field','all'}) 
+        imageNo
+        frame
         imageDatabase
         tracker
         counter
@@ -60,9 +61,56 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
             
-            % Check for errors
-            if length(obj.imageNo) ~= length(obj.frame)
-                error('The number of images and frames to probe must be equal.')
+            % Select dataset
+            if strcmp(obj.cellPolarity,'on')
+                if strcmp(obj.rectificationBias,'center')
+                    % Surrounds entirely within [0, 50]% contrast, centers have >1
+                    % regions outside [0, 50]%
+                    obj.imageNo = [6,20,22,31,39,45,51,58,67,74,76,80,82,83,86,88,91];
+                    obj.frame   = [289,574,289,635,64,281,127,1013,457,410,554,846,498,514,792,314,355];
+                elseif strcmp(obj.rectificationBias,'surround')
+                    % Centers entirely within [0, 50]% contrast, surrounds have >2
+                    % regions outside [0, 50]%
+                    obj.imageNo = [11,12,25,28,29,32,34,36,41,44,46,49,52,55,57,65,66,79,80,82,85,86,88,89,98];
+                    obj.frame   = [357,393,299,423,589,202,56,70,615,399,262,176,164,954,143,340,159,676,244,877,690,621,745,62,265];
+                elseif strcmp(obj.rectificationBias,'full-field')
+                    % Centers have four regions within and outside [0, 50]% contrast
+                    % Surrounds have four regions within and outside [0, 50]% contrast
+                    obj.imageNo = [1,8,11,14,17,18,20,28,31,39,41,45,49,56,57,59,67,69,76,81,85,86,89,93];
+                    obj.frame   = [495,971,488,758,797,422,926,270,744,593,118,805,359,489,309,277,636,129,341,731,59,248,775,570];
+                elseif strcmp(obj.rectificationBias,'all')
+                    % All datasets
+                    obj.imageNo = [6,20,22,31,39,45,51,58,67,74,76,80,82,83,86,88,91];
+                    obj.imageNo = cat(2,obj.imageNo,[11,12,25,28,29,32,34,36,41,44,46,49,52,55,57,65,66,79,80,82,85,86,88,89,98]);
+                    obj.imageNo = cat(2,obj.imageNo,[1,8,11,14,17,18,20,28,31,39,41,45,49,56,57,59,67,69,76,81,85,86,89,93]);
+                    obj.frame   = [289,574,289,635,64,281,127,1013,457,410,554,846,498,514,792,314,355];
+                    obj.frame   = cat(2,obj.frame,[357,393,299,423,589,202,56,70,615,399,262,176,164,954,143,340,159,676,244,877,690,621,745,62,265]);
+                    obj.frame   = cat(2,obj.frame,[495,971,488,758,797,422,926,270,744,593,118,805,359,489,309,277,636,129,341,731,59,248,775,570]);
+                end
+            elseif strcmp(obj.cellPolarity,'off')
+                if strcmp(obj.rectificationBias,'center')
+                    % Surrounds entirely within [-50, 0]% contrast, centers have >2
+                    % regions outside [-50, 0]%
+                    obj.imageNo = [7,8,13,16,18,19,23,33,35,38,44,47,75,77,78,80,83,93,95,98];
+                    obj.frame   = [294,399,475,53,620,398,463,1016,599,164,636,409,536,341,451,538,923,732,693,569];
+                elseif strcmp(obj.rectificationBias,'surround')
+                    % Centers entirely within [-50, 0]% contrast, surrounds have >3
+                    % regions outside [-50, 0]%
+                    obj.imageNo = [3,5,6,10,12,20,21,23,25,29,34,40,51,58,64,74,79,83,84,85,86,90,92,96,98];
+                    obj.frame   = [424,416,352,426,650,235,857,116,570,828,189,712,360,134,719,462,565,431,119,624,109,217,824,391,813];
+                elseif strcmp(obj.rectificationBias,'full-field')
+                    % Centers have four regions within and outside [-50, 0]% contrast
+                    % Surrounds have four regions within and outside [-50, 0]% contrast
+                    obj.imageNo = [3,8,12,31,33,45,46,67,69,73,85,87,89,93,94,100];
+                    obj.frame   = [475,971,491,744,727,805,545,636,335,906,59,901,775,570,220,707];
+                elseif strcmp(obj.rectificationBias,'all')
+                    obj.imageNo = [7,8,13,16,18,19,23,33,35,38,44,47,75,77,78,80,83,93,95,98];
+                    obj.imageNo = cat(2,obj.imageNo,[3,5,6,10,12,20,21,23,25,29,34,40,51,58,64,74,79,83,84,85,86,90,92,96,98]);
+                    obj.imageNo = cat(2,obj.imageNo,[3,8,12,31,33,45,46,67,69,73,85,87,89,93,94,100]);
+                    obj.frame   = [294,399,475,53,620,398,463,1016,599,164,636,409,536,341,451,538,923,732,693,569];
+                    obj.frame   = cat(2,obj.frame,[424,416,352,426,650,235,857,116,570,828,189,712,360,134,719,462,565,431,119,624,109,217,824,391,813]);
+                    obj.frame   = cat(2,obj.frame,[475,971,491,744,727,805,545,636,335,906,59,901,775,570,220,707]);
+                end
             end
             
             % Use DOVES database to identify images along trajectory

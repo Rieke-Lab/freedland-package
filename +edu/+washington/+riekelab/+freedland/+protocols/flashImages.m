@@ -112,7 +112,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     obj.frame   = cat(2,obj.frame,[475,971,491,744,727,805,545,636,335,906,59,901,775,570,220,707]);
                 end
             end
-            
+
             % Use DOVES database to identify images along trajectory
             imageFrame = findImage(obj);
             obj.imageDatabase = uint8(imageFrame);

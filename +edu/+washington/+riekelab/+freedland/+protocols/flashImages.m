@@ -13,13 +13,13 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Natural image information
         cellPolarity = 'on'; % on- or off-pathway
-        rectificationBias   = 'all'; % flash images with rectification only in the center, surround, or both. Select "all" to sample all three.
+        rectificationBias   = 'ignore'; % flash images with rectification only in the center, surround, or both. Select "all" to sample all three. Select "ignore" to simply sample a variety of luminances.
         backgroundIntensity = 0.168; % common luminance to hold images at.
         
         % Reduce image appropriately
-        includeReducedImages    = true;  % randomize each rotation
-        rfSigmaCenter           = 50;    % receptive-field center (only needed if reducing images)
-        rfSigmaSurround         = 160;  % receptive-field surround (only needed if reducing images)
+        includeReducedImages    = false;    % include 16-D reduce image flashes
+        rfSigmaCenter           = 50;       % receptive-field center (only needed if reducing images)
+        rfSigmaSurround         = 160;      % receptive-field surround (only needed if reducing images)
 
         % Additional parameters
         randomize   = true;  % randomize order of flashed images
@@ -80,12 +80,11 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     obj.frame   = [495,971,488,758,797,422,926,270,744,593,118,805,359,489,309,277,636,129,341,731,59,248,775,570];
                 elseif strcmp(obj.rectificationBias,'all')
                     % All datasets
-                    obj.imageNo = [6,20,22,31,39,45,51,58,67,74,76,80,82,83,86,88,91];
-                    obj.imageNo = cat(2,obj.imageNo,[11,12,25,28,29,32,34,36,41,44,46,49,52,55,57,65,66,79,80,82,85,86,88,89,98]);
-                    obj.imageNo = cat(2,obj.imageNo,[1,8,11,14,17,18,20,28,31,39,41,45,49,56,57,59,67,69,76,81,85,86,89,93]);
-                    obj.frame   = [289,574,289,635,64,281,127,1013,457,410,554,846,498,514,792,314,355];
-                    obj.frame   = cat(2,obj.frame,[357,393,299,423,589,202,56,70,615,399,262,176,164,954,143,340,159,676,244,877,690,621,745,62,265]);
-                    obj.frame   = cat(2,obj.frame,[495,971,488,758,797,422,926,270,744,593,118,805,359,489,309,277,636,129,341,731,59,248,775,570]);
+                    obj.imageNo = [6,20,22,31,39,45,51,58,67,74,76,80,82,83,86,88,91,11,12,25,28,29,32,34,36,41,44,46,49,52,55,57,65,66,79,80,82,85,86,88,89,98,1,8,11,14,17,18,20,28,31,39,41,45,49,56,57,59,67,69,76,81,85,86,89,93];
+                    obj.frame   = [289,574,289,635,64,281,127,1013,457,410,554,846,498,514,792,314,355,357,393,299,423,589,202,56,70,615,399,262,176,164,954,143,340,159,676,244,877,690,621,745,62,265,495,971,488,758,797,422,926,270,744,593,118,805,359,489,309,277,636,129,341,731,59,248,775,570];
+                elseif strcmp(obj.rectificationBias,'ignore')
+                    obj.imageNo = [1,84,17,77,43,89,20,60,85,86,100,2,72,42,25,28,28,27,28,3,37,93,53,76,88,82,67,80,20,11,98,83,31,37,11,9,32,66,28,48,15,67,52,24,14,9,76,67,37,6,67,99,6,57,99,25,97,14,49,21,48,14,70,15,52,60,5,2,97,101,31,40,56,90,99,6,18,62,65,101,77,99,89,99,56,31,9,88,31,18,26,9,26,36,99,97,54,5];
+                    obj.frame = [57,1014,267,292,373,448,795,226,836,203,486,825,592,479,766,379,666,471,462,135,456,434,259,308,495,234,268,991,926,749,123,167,857,270,293,947,578,795,920,503,442,39,959,546,412,650,793,102,732,60,751,732,451,704,614,203,893,286,51,997,693,617,118,632,224,743,251,957,760,568,208,64,943,144,340,603,797,62,175,530,341,61,222,568,550,985,426,796,1022,201,202,135,234,878,450,857,254,190];
                 end
             elseif strcmp(obj.cellPolarity,'off')
                 if strcmp(obj.rectificationBias,'center')
@@ -104,12 +103,11 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                     obj.imageNo = [3,8,12,31,33,45,46,67,69,73,85,87,89,93,94,100];
                     obj.frame   = [475,971,491,744,727,805,545,636,335,906,59,901,775,570,220,707];
                 elseif strcmp(obj.rectificationBias,'all')
-                    obj.imageNo = [7,8,13,16,18,19,23,33,35,38,44,47,75,77,78,80,83,93,95,98];
-                    obj.imageNo = cat(2,obj.imageNo,[3,5,6,10,12,20,21,23,25,29,34,40,51,58,64,74,79,83,84,85,86,90,92,96,98]);
-                    obj.imageNo = cat(2,obj.imageNo,[3,8,12,31,33,45,46,67,69,73,85,87,89,93,94,100]);
-                    obj.frame   = [294,399,475,53,620,398,463,1016,599,164,636,409,536,341,451,538,923,732,693,569];
-                    obj.frame   = cat(2,obj.frame,[424,416,352,426,650,235,857,116,570,828,189,712,360,134,719,462,565,431,119,624,109,217,824,391,813]);
-                    obj.frame   = cat(2,obj.frame,[475,971,491,744,727,805,545,636,335,906,59,901,775,570,220,707]);
+                    obj.imageNo = [7,8,13,16,18,19,23,33,35,38,44,47,75,77,78,80,83,93,95,98,3,5,6,10,12,20,21,23,25,29,34,40,51,58,64,74,79,83,84,85,86,90,92,96,98,3,8,12,31,33,45,46,67,69,73,85,87,89,93,94,100];
+                    obj.frame   = [294,399,475,53,620,398,463,1016,599,164,636,409,536,341,451,538,923,732,693,569,424,416,352,426,650,235,857,116,570,828,189,712,360,134,719,462,565,431,119,624,109,217,824,391,813,475,971,491,744,727,805,545,636,335,906,59,901,775,570,220,707];
+                elseif strcmp(obj.rectificationBias,'ignore')
+                    obj.imageNo = [5,99,59,6,48,90,52,27,69,22,79,78,37,79,35,31,38,14,70,83,11,51,46,16,53,29,85,6,21,92,66,84,20,33,83,42,27,3,7,87,23,43,18,3,94,83,4,71,3,1,100,29,19,90,56,81,96,15,2,73,69,69,69,15,15,56,71,60];
+                    obj.frame   = [190,340,699,561,220,625,558,275,273,484,317,298,402,857,123,338,634,224,582,128,579,51,100,444,317,428,790,905,388,630,159,213,574,669,701,45,906,796,337,277,463,423,620,995,136,805,269,248,256,556,707,305,148,290,310,440,704,127,482,977,53,761,1001,832,768,889,655,487];
                 end
             end
 

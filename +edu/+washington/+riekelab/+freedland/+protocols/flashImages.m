@@ -9,11 +9,11 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Region of image to be shown
         maskRadius  = 1000;  % in um. Places mask over surrounding portion of image.
-        region      = 'full-field'; % where to display image
+        region      = 'centerWithAnnulus'; % where to display image
         
         % Natural image information
         cellPolarity = 'on'; % on- or off-pathway
-        rectificationBias   = 'ignore'; % flash images with rectification only in the center, surround, or both. Select "all" to sample all three. Select "ignore" to simply sample a variety of luminances.
+        rectificationBias   = 'centerSurround'; % flash images with rectification only in the center, surround, or both. Select "all" to sample all three. Select "ignore" to simply sample a variety of luminances. Select "centerSurround" to focus on distibuted center/surround images.
         backgroundIntensity = 0.168; % common luminance to hold images at.
         
         % Reduce image appropriately
@@ -31,9 +31,9 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        regionType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only', 'full-field'}) 
+        regionType = symphonyui.core.PropertyType('char', 'row', {'center-only', 'surround-only', 'full-field','centerWithAnnulus','fullFieldWithAnnulus'}) 
         cellPolarityType = symphonyui.core.PropertyType('char', 'row', {'on', 'off'}) 
-        rectificationBiasType = symphonyui.core.PropertyType('char', 'row', {'center','surround','full-field','all'}) 
+        rectificationBiasType = symphonyui.core.PropertyType('char', 'row', {'center','surround','full-field','all','ignore','centerSurround'}) 
         imageNo
         frame
         imageDatabase
@@ -85,6 +85,11 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 elseif strcmp(obj.rectificationBias,'ignore')
                     obj.imageNo = [1,84,17,77,43,89,20,60,85,86,100,2,72,42,25,28,28,27,28,3,37,93,53,76,88,82,67,80,20,11,98,83,31,37,11,9,32,66,28,48,15,67,52,24,14,9,76,67,37,6,67,99,6,57,99,25,97,14,49,21,48,14,70,15,52,60,5,2,97,101,31,40,56,90,99,6,18,62,65,101,77,99,89,99,56,31,9,88,31,18,26,9,26,36,99,97,54,5];
                     obj.frame = [57,1014,267,292,373,448,795,226,836,203,486,825,592,479,766,379,666,471,462,135,456,434,259,308,495,234,268,991,926,749,123,167,857,270,293,947,578,795,920,503,442,39,959,546,412,650,793,102,732,60,751,732,451,704,614,203,893,286,51,997,693,617,118,632,224,743,251,957,760,568,208,64,943,144,340,603,797,62,175,530,341,61,222,568,550,985,426,796,1022,201,202,135,234,878,450,857,254,190];
+                elseif strcmp(obj.rectificationBias,'centerSurround')
+                    % Images with evenly-distributed diversity of center-
+                    % and surround-luminances
+                    obj.imageNo = [1,19,92,98,98,83,64,30,7,2,5,4,42,8,73,86,81,93,93,46,29,73,72,77,93,96,94,47,100,85,25,27,78,77,8,91,69,90,22,91,28,12,67,53,97,49,4,83,86,19,57,14,18,45,9,74,68,66,15,98,74,2];
+                    obj.frame = [225,626,871,569,504,923,719,996,182,863,363,901,888,542,404,152,912,955,833,856,110,524,421,1016,75,825,632,131,165,59,716,147,495,743,873,415,129,733,345,940,12,225,268,963,168,848,957,167,689,917,65,671,859,230,696,287,833,374,318,163,828,167];
                 end
             elseif strcmp(obj.cellPolarity,'off')
                 if strcmp(obj.rectificationBias,'center')
@@ -108,6 +113,9 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 elseif strcmp(obj.rectificationBias,'ignore')
                     obj.imageNo = [5,90,22,25,6,40,40,52,52,28,62,41,22,83,45,28,37,45,18,19,31,22,90,51,70,55,101,6,51,19,60,15,53,40,60,1,6,74,69,49,66,74,7,8,33,47,30,42,27,90,44,56,87,61,92,95,18,4,21,1,83,1,96,33,3,1,56,17,29,19,71,19,56,71,98,19,15,2,71,100,69,69,5,69,15,60,56,71,60,69];
                     obj.frame   = [190,144,788,247,561,320,272,959,558,920,845,488,484,514,445,12,402,230,157,340,338,49,879,127,582,189,72,664,51,851,604,967,317,830,397,225,905,929,929,848,159,571,754,128,669,230,520,636,906,385,749,53,277,764,261,629,620,538,908,57,805,779,282,161,256,603,370,474,305,148,136,54,310,811,698,246,127,482,307,294,53,477,681,1001,832,549,889,655,487,668];
+                elseif strcmp(obj.rectificationBias,'centerSurround')
+                    obj.imageNo = [1,19,92,98,98,83,64,30,7,2,5,4,42,8,73,86,81,93,93,46,29,73,72,77,93,96,94,47,100,85,25,27,78,77,8,91,69,90,22,91,28,12,67,53,97,49,4,83,86,19,57,14,18,45,9,74,68,66,15,98,74,2];
+                    obj.frame = [225,626,871,569,504,923,719,996,182,863,363,901,888,542,404,152,912,955,833,856,110,524,421,1016,75,825,632,131,165,59,716,147,495,743,873,415,129,733,345,940,12,225,268,963,168,848,957,167,689,917,65,671,859,230,696,287,833,374,318,163,828,167];
                 end
             end
 
@@ -204,10 +212,20 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             aperture.color = obj.backgroundIntensity;
             aperture.size = [max(canvasSize) max(canvasSize)];
             
+            % For annulus settings
+            annulusSize = 50; % in microns
+            annulusSize = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
+                annulusSize,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix'));
+            
             if strcmp(obj.region,'center-only') %% Create aperture
                 mask = stage.core.Mask.createCircularAperture(aperatureDiameter/max(canvasSize), 1024);
+            elseif strcmp(obj.region,'centerWithAnnulus')
+                mask = stage.core.Mask.createCircularAperture((aperatureDiameter-annulusSize)/max(canvasSize), 1024);
             elseif strcmp(obj.region,'surround-only')
                 mask = stage.core.Mask.createAnnulus(0,aperatureDiameter/max(canvasSize), 1024);
+            elseif strcmp(obj.region,'fullFieldWithAnnulus')
+                mask = stage.core.Mask.createAnnulus((aperatureDiameter-annulusSize)/max(canvasSize),...
+                    (aperatureDiameter+annulusSize)/max(canvasSize), 1024);
             elseif strcmp(obj.region,'full-field')
                 mask = stage.core.Mask.createCircularAperture(1, 1024);
             end

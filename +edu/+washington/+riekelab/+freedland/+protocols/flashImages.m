@@ -215,7 +215,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             % For annulus settings
             annulusSize = 50; % in microns
             annulusSize = round(edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
-                annulusSize,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix'));
+                annulusSize/2,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix'));
             
             if strcmp(obj.region,'center-only') %% Create aperture
                 mask = stage.core.Mask.createCircularAperture(aperatureDiameter/max(canvasSize), 1024);

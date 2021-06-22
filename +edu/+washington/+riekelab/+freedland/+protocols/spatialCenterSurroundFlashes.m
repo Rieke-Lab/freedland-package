@@ -52,7 +52,7 @@ classdef spatialCenterSurroundFlashes < edu.washington.riekelab.protocols.RiekeL
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
-            
+
             % Generate all spatial masks
             masks = generateMasks(obj);
             maskTracker = zeros(size(masks{1,1}));
@@ -100,11 +100,13 @@ classdef spatialCenterSurroundFlashes < edu.washington.riekelab.protocols.RiekeL
             
             % Setup display
             obj.counter = 0;
-            if obj.randomize == true
-                obj.order = randperm(size(obj.imageDatabase,4));
+            if obj.randomizeOrder == true
+                obj.order = randperm(size(obj.imageTracker,1));
             else
-                obj.order = 1:size(obj.imageDatabase,4);
+                obj.order = 1:size(obj.imageTracker,1);
             end
+            
+            disp(strcat('Unique images to present:',mat2str(length(obj.order))));
         end
         
         function prepareEpoch(obj, epoch)
@@ -113,11 +115,11 @@ classdef spatialCenterSurroundFlashes < edu.washington.riekelab.protocols.RiekeL
             duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            
+
             % Save parameters as metadata
-            epoch.addParameter('centerIntensity',obj.infoTracker{obj.order(obj.counter+1),1});
-            epoch.addParameter('centerSpatialContrast',obj.infoTracker{obj.order(obj.counter+1),2});
-            epoch.addParameter('surroundIntensity',obj.infoTracker{obj.order(obj.counter+1),3});
+            epoch.addParameter('specificCenterIntensity',obj.infoTracker{obj.order(obj.counter+1),1});
+            epoch.addParameter('specificCenterSpatialContrast',obj.infoTracker{obj.order(obj.counter+1),2});
+            epoch.addParameter('specificSurroundIntensity',obj.infoTracker{obj.order(obj.counter+1),3});
         end
 
         function p = createPresentation(obj)
@@ -176,11 +178,11 @@ classdef spatialCenterSurroundFlashes < edu.washington.riekelab.protocols.RiekeL
         end
    
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < (obj.numberOfAverages * length(obj.centerSequence));
+            tf = obj.numEpochsPrepared < (obj.numberOfAverages * length(obj.order));
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < (obj.numberOfAverages * length(obj.centerSequence));
+            tf = obj.numEpochsCompleted < (obj.numberOfAverages * length(obj.order));
         end
         
     end

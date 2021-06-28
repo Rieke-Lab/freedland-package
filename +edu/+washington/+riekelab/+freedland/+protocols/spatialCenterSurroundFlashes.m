@@ -13,7 +13,7 @@ classdef spatialCenterSurroundFlashes < edu.washington.riekelab.protocols.RiekeL
         annulusSize             = 50;  % null region between center and surround, in um
         
         % Luminance information
-        centerIntensity         = [-20:10:40];       % luminance of uniform center, in percent contrast
+        centerIntensity         = -20:10:40;         % luminance of uniform center, in percent contrast
         surroundIntensity       = [-90 -50 0 50 90]; % luminance of uniform surround, in percent contrast
         backgroundIntensity     = 0.168;             % light intensity between trials (0-1)
         

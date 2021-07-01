@@ -13,7 +13,7 @@ classdef flashImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         % Natural image information
         cellPolarity = 'on'; % on- or off-pathway
-        rectificationBias   = 'fullFieldWithAnnulus'; % flash images with rectification only in the center, surround, or both. Select "all" to sample all three. Select "ignore" to simply sample a variety of luminances. Select "diverse" to focus on distibuted center/surround images.
+        rectificationBias   = 'diverse'; % flash images with rectification only in the center, surround, or both. Select "all" to sample all three. Select "ignore" to simply sample a variety of luminances. Select "diverse" to focus on distibuted center/surround images.
         backgroundIntensity = 0.168; % common luminance to hold images at.
         
         % Reduce image appropriately

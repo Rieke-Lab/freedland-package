@@ -11,13 +11,14 @@ classdef splitFieldLinearity < edu.washington.riekelab.protocols.RiekeLabStagePr
         
         % Stimulus info
         leftContrasts   = 0:0.2:1 % on left side of split gratings (-1 to 1)
-        rightContrasts  = [-0.75 -0.25]% on right side of split gratings (-1 to 1)
+        rightContrasts  = [-0.75 -0.5 -0.25 0]% on right side of split gratings (-1 to 1)
         spotDiameter    = 300; % um
         
         % Control
         rectificationThreshold  = 0; % rectify values beyond contrast value
         cellClass               = 'ON' % type of cell
         includeUniformFlashes   = true; % include uniform flashes with expected post-rectification luminance
+        rotate                  = 90;
 
         % Other details
         rotation = 0; % deg
@@ -87,49 +88,51 @@ classdef splitFieldLinearity < edu.washington.riekelab.protocols.RiekeLabStagePr
             duration = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3;
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
-            
-            epoch.addParameter('specificLeftContrast',obj.leftContrasts(obj.order(obj.counter+1)));
-            epoch.addParameter('specificRightContrast',obj.rightContrasts(obj.order(obj.counter+1)));
+
+            epoch.addParameter('specificLeftContrast',obj.leftLuminances(obj.order(obj.counter+1)));
+            epoch.addParameter('specificRightContrast',obj.rightLuminances(obj.order(obj.counter+1)));
         end
         
         function p = createPresentation(obj)
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
-            
+
             % Convert from microns to pixels
             spotDiameterPix = obj.rig.getDevice('Stage').um2pix(obj.spotDiameter);
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
-            
+
             % Define masks
-            [xx,yy] = meshgrid(1:canvasSize(2),1:canvasSize(1));
-            th = atan((xx - canvasSize(2)/2) ./ (yy - canvasSize(1)/2));
+            [xx,yy] = meshgrid(1:canvasSize(1),1:canvasSize(2));
+            th = atan((xx - canvasSize(1)/2) ./ (yy - canvasSize(2)/2));
             th = abs(th-pi/2);              
             nonsmooth = find(diff(th) > pi/2,1);
             th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
             th = rad2deg(th);
-            th = mod(th + obj.rotate,360); % Rotate as required
-            leftMask = uint8(double(th < 180) .* 255);
-            rightMask = uint8(double(th >= 180) .* 255);
-            
+            th = mod(th + obj.rotate,360); % Rotate
+            leftMask = uint8(double(th < 180).*255);
+            rightMask = uint8(double(th >= 180).*255);
+  
             % Convert contrast to luminance
             leftL = (obj.leftLuminances(obj.order(obj.counter+1)) + 1).*obj.backgroundIntensity;
             rightL = (obj.rightLuminances(obj.order(obj.counter+1)) + 1).*obj.backgroundIntensity;
             
             % Left mask
-            left = stage.builtin.stimuli.Grating();
-            left.color = 2*leftL; % x2 for grating preset
+            left = stage.builtin.stimuli.Rectangle();
+            left.color = leftL; % x2 for grating preset
             left.position = canvasSize/2;
             left.size = [spotDiameterPix, spotDiameterPix]; 
             leftMaskA = stage.core.Mask(leftMask);
             left.setMask(leftMaskA);
+            p.addStimulus(left); %add aperture
             
             % Right mask
-            right = stage.builtin.stimuli.Grating();
-            right.color = 2*rightL; % x2 for grating preset
+            right = stage.builtin.stimuli.Rectangle();
+            right.color = rightL; % x2 for grating preset
             right.position = canvasSize/2;
             right.size = [spotDiameterPix, spotDiameterPix]; 
             rightMaskA = stage.core.Mask(rightMask);
-            left.setMask(rightMaskA);
+            right.setMask(rightMaskA);
+            p.addStimulus(right); %add aperture
             
             % Create aperture
             aperture = stage.builtin.stimuli.Rectangle();
@@ -152,22 +155,12 @@ classdef splitFieldLinearity < edu.washington.riekelab.protocols.RiekeLabStagePr
             obj.counter = mod(obj.counter + 1,length(obj.order));
         end
         
-        %same presentation each epoch in a run. Replay.
-        function controllerDidStartHardware(obj)
-            controllerDidStartHardware@edu.washington.riekelab.protocols.RiekeLabProtocol(obj);
-            if (obj.numEpochsCompleted >= 1) && (obj.numEpochsCompleted < obj.numberOfAverages)
-                obj.rig.getDevice('Stage').replay
-            else
-                obj.rig.getDevice('Stage').play(obj.createPresentation());
-            end
-        end
-        
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages;
+            tf = obj.numEpochsPrepared < obj.numberOfAverages .* length(obj.order);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages;
+            tf = obj.numEpochsCompleted < obj.numberOfAverages .* length(obj.order);
         end
         
     end

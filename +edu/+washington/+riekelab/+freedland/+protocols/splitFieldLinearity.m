@@ -10,8 +10,8 @@ classdef splitFieldLinearity < edu.washington.riekelab.protocols.RiekeLabStagePr
         tailTime    = 250 % ms
         
         % Stimulus info
-        leftContrasts   = 0:0.2:1 % on left side of split gratings (-1 to 1)
-        rightContrasts  = [-0.75 -0.5 -0.25 0]% on right side of split gratings (-1 to 1)
+        leftContrasts   = 0.1:0.1:1 % on left side of split gratings (-1 to 1)
+        rightContrasts  = [-0.75 -0.5 -0.25 0] % on right side of split gratings (-1 to 1)
         spotDiameter    = 300; % um
         
         % Control
@@ -73,6 +73,12 @@ classdef splitFieldLinearity < edu.washington.riekelab.protocols.RiekeLabStagePr
                 obj.leftLuminances = [obj.leftLuminances, integratedLuminances];
                 obj.rightLuminances = [obj.rightLuminances, integratedLuminances];
             end
+            
+            % Remove redundancies
+            s = [obj.leftLuminances; obj.rightLuminances]';
+            s = unique(s,'rows');
+            obj.leftLuminances = s(:,1)';
+            obj.rightLuminances = s(:,1)';
             
             obj.counter = 0;
             if obj.randomize == true

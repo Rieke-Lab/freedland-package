@@ -1,5 +1,4 @@
-% Replace a natural movie with a variety of integrated disks.
-% By J. Freedland, 2019.
+% Presents movie files exported to a specific folders.
 classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties

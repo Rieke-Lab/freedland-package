@@ -1,5 +1,5 @@
-% Flashes various luminances in center and surround with spatial contrast
-% in center
+% Flashes various luminances in center and surround with option for
+% including spatial contrast
 classdef spatialCenterSurroundFlashes < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties

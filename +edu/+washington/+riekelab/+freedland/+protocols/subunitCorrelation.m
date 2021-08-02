@@ -133,9 +133,9 @@ classdef subunitCorrelation < edu.washington.riekelab.protocols.RiekeLabStagePro
             end
             cycleAvgResp = cycleAvgResp./noCycles;
             timeVector = (1:length(cycleAvgResp))./sampleRate; %sec
-            runningTrace = runningTrace + cycleAvgResp;
+            runningTrace = cycleAvgResp;
             cla(axesHandle);
-            h = line(timeVector, runningTrace./obj.numEpochsCompleted, 'Parent', axesHandle);
+            h = line(timeVector, runningTrace, 'Parent', axesHandle);
             set(h,'Color',[0 0 0],'LineWidth',2);
             xlabel(axesHandle,'Time (s)')
             title(axesHandle,'Running cycle average...')

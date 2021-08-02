@@ -46,6 +46,18 @@ classdef subunitCorrelation < edu.washington.riekelab.protocols.RiekeLabStagePro
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+            % Calculate F2 behavior
+            if ~strcmp(obj.onlineAnalysis,'none')
+                if isempty(obj.analysisFigure) || ~isvalid(obj.analysisFigure)
+                    obj.analysisFigure = obj.showFigure('symphonyui.builtin.figures.CustomFigure', @obj.F1F2_PSTH);
+                    f = obj.analysisFigure.getFigureHandle();
+                    set(f, 'Name', 'Cycle avg PSTH');
+                    obj.analysisFigure.userData.runningTrace = 0;
+                    obj.analysisFigure.userData.axesHandle = axes('Parent', f);
+                else
+                    obj.analysisFigure.userData.runningTrace = 0;
+                end
+            end
 
             % Convert units from microns to pixels
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
@@ -85,6 +97,54 @@ classdef subunitCorrelation < edu.washington.riekelab.protocols.RiekeLabStagePro
             else
                 obj.order = 1:size(obj.positiveContrast,1);
             end
+        end
+        
+        % From M. Turner's code for calculating F2 behavior
+        function F1F2_PSTH(obj, ~, epoch) %online analysis function
+            response = epoch.getResponse(obj.rig.getDevice(obj.amp));
+            quantities = response.getData();
+            sampleRate = response.sampleRate.quantityInBaseUnits;
+            
+            axesHandle = obj.analysisFigure.userData.axesHandle;
+            runningTrace = obj.analysisFigure.userData.runningTrace;
+            
+            if strcmp(obj.onlineAnalysis,'extracellular') %spike recording
+                filterSigma = (20/1000)*sampleRate; %msec -> dataPts
+                newFilt = normpdf(1:10*filterSigma,10*filterSigma/2,filterSigma);
+                res = edu.washington.riekelab.turner.utils.spikeDetectorOnline(quantities,[],sampleRate);
+                epochResponseTrace = zeros(size(quantities));
+                epochResponseTrace(res.sp) = 1; %spike binary
+                epochResponseTrace = sampleRate*conv(epochResponseTrace,newFilt,'same'); %inst firing rate
+            else %intracellular - Vclamp
+                epochResponseTrace = quantities-mean(quantities(1:sampleRate*obj.preTime/1000)); %baseline
+                if strcmp(obj.onlineAnalysis,'exc') %measuring exc
+                    epochResponseTrace = epochResponseTrace./(-60-0); %conductance (nS), ballpark
+                elseif strcmp(obj.onlineAnalysis,'inh') %measuring inh
+                    epochResponseTrace = epochResponseTrace./(0-(-60)); %conductance (nS), ballpark
+                end
+            end
+            
+            noCycles = floor(obj.temporalFrequency*obj.stimTime/1000);
+            period = (1/obj.temporalFrequency)*sampleRate; %data points
+            epochResponseTrace(1:(sampleRate*obj.preTime/1000)) = []; %cut out prePts
+            cycleAvgResp = 0;
+            for c = 1:noCycles
+                cycleAvgResp = cycleAvgResp + epochResponseTrace((c-1)*period+1:c*period);
+            end
+            cycleAvgResp = cycleAvgResp./noCycles;
+            timeVector = (1:length(cycleAvgResp))./sampleRate; %sec
+            runningTrace = runningTrace + cycleAvgResp;
+            cla(axesHandle);
+            h = line(timeVector, runningTrace./obj.numEpochsCompleted, 'Parent', axesHandle);
+            set(h,'Color',[0 0 0],'LineWidth',2);
+            xlabel(axesHandle,'Time (s)')
+            title(axesHandle,'Running cycle average...')
+            if strcmp(obj.onlineAnalysis,'extracellular')
+                ylabel(axesHandle,'Spike rate (Hz)')
+            else
+                ylabel(axesHandle,'Resp (nS)')
+            end
+            obj.analysisFigure.userData.runningTrace = runningTrace;
         end
         
         function prepareEpoch(obj, epoch)

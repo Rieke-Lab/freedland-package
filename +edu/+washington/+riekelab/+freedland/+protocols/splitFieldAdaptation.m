@@ -26,6 +26,7 @@ classdef splitFieldAdaptation < edu.washington.riekelab.protocols.RiekeLabStageP
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})
         counter
         order
+        timing
     end
 
     methods
@@ -75,7 +76,7 @@ classdef splitFieldAdaptation < edu.washington.riekelab.protocols.RiekeLabStageP
             nonsmooth = find(diff(th) > pi/2,1);
             th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
             th = rad2deg(th);
-            th = mod(th + obj.rotate,360); % Rotate as needed
+            th = mod(th + obj.rotation + 90,360); % Rotate as needed
             % Define masks
             leftMask = uint8(double(th < 180).*255); % [0 to 180 degrees]
             rightMask = uint8(double(th >= 180).*255); % [180 to 360 degrees]
@@ -83,25 +84,15 @@ classdef splitFieldAdaptation < edu.washington.riekelab.protocols.RiekeLabStageP
             
             % Build temporal trajectory
             time = 0:1:obj.stimTime; % in ms
-            lightIntensity_Left  = ones(1,length(time)) .* obj.contrasts(1);
-            lightIntensity_Right = ones(1,length(time)) .* obj.contrasts(2);
+            lightIntensity_Left  = ones(1,length(time)) .* (1+obj.contrasts(1)) .* obj.backgroundIntensity;
+            lightIntensity_Right = ones(1,length(time)) .* (1+obj.contrasts(2)) .* obj.backgroundIntensity;
             flipTime        = 0:1000/obj.temporalFrequency(obj.order(obj.counter+1)):obj.stimTime; % in ms
             for a = 2:2:length(flipTime)-1
                 range = round(flipTime(a)):round(flipTime(a+1));
-                lightIntensity_Left(range)  = obj.contrasts(2);
-                lightIntensity_Right(range) = obj.contrasts(1);
+                lightIntensity_Left(range)  = (1+obj.contrasts(2)) .* obj.backgroundIntensity;
+                lightIntensity_Right(range) = (1+obj.contrasts(1)) .* obj.backgroundIntensity;
             end
-            
-            % Function for adjusting temporal light intensity
-            function s = getLightIntensity(obj, time, lightIntensity)
-                if time < 0
-                    s = obj.backgroundIntensity;
-                elseif time > obj.timeTraj(end)
-                    s = lightIntensity(1,end);
-                else
-                    s = interp1(obj.timeTraj,lightIntensity,time,'nearest');
-                end
-            end
+            obj.timing = time .* 1e-3; % in s
             
             % Left mask
             left = stage.builtin.stimuli.Rectangle();
@@ -124,7 +115,7 @@ classdef splitFieldAdaptation < edu.washington.riekelab.protocols.RiekeLabStageP
             right.setMask(rightMaskA);
             p.addStimulus(right);
             rightLightIntensity = stage.builtin.controllers.PropertyController(right,...
-                'color', @(state)getLightIntensity(obj, state.time - obj.preTime/1e3, lightIntensity_Right));
+                'color', @(state)getLightIntensity(obj, state.time - obj.preTime .* 1e-3, lightIntensity_Right));
             p.addController(rightLightIntensity);
             
             % Create aperture
@@ -135,6 +126,17 @@ classdef splitFieldAdaptation < edu.washington.riekelab.protocols.RiekeLabStageP
             mask = stage.core.Mask.createCircularAperture(1, 1024); %circular aperture
             aperture.setMask(mask);
             p.addStimulus(aperture); %add aperture
+            
+            % Function for adjusting temporal light intensity
+            function s = getLightIntensity(obj, time, lightIntensity)
+                if time < 0
+                    s = obj.backgroundIntensity;
+                elseif time > obj.timing(end)
+                    s = lightIntensity(1,end);
+                else
+                    s = interp1(obj.timing,lightIntensity,time,'nearest');
+                end
+            end
             
             %hide during pre & post
             grateVisible = stage.builtin.controllers.PropertyController(left, 'visible', ...

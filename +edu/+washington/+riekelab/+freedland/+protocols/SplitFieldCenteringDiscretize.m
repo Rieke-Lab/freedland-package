@@ -6,12 +6,12 @@ classdef SplitFieldCenteringDiscretize < edu.washington.riekelab.protocols.Rieke
         tailTime = 250 % ms
         contrast = 0.9 % relative to mean (0-1)
         temporalFrequency = 4 % Hz
-        resolution = 20; % frequency (Hz) to sample sinusoid (i.e, discretizes)
+        samplingFrequency = 16; % frequency (Hz) to sample sinusoid. Ex values: [0 12 16 28 32 36 44]
         spotDiameter = 300; % um
         maskDiameter = 0 % um
         splitField = false 
         rotation = 0;  % deg
-        backgroundIntensity = 0.5 % (0-1)
+        backgroundIntensity = 0.168 % (0-1)
         onlineAnalysis = 'none'
         numberOfAverages = uint16(1) % number of epochs to queue
         amp % Output amplifier
@@ -144,11 +144,15 @@ classdef SplitFieldCenteringDiscretize < edu.washington.riekelab.protocols.Rieke
             end
             function c = getGrateContrast(obj, time)
                 % Discretize sinusoid
-                res = 1000/obj.resolution;
-                t = floor(time/res) .* res;
-                
-                % Calculate contrast
-                c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * t);
+                if obj.samplingFrequency > 0
+                    res = 1/obj.samplingFrequency; % in seconds
+                    t = floor(time/res) .* res;
+
+                    % Calculate contrast
+                    c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * t);
+                else
+                    c = obj.contrast.*sin(2 * pi * obj.temporalFrequency * time);
+                end
             end
             
             % Create aperture

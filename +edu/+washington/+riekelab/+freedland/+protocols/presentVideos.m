@@ -91,10 +91,11 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 obj.movieFilenames = testMovies;
             end
             
-            obj.sequence = repmat(1:size(obj.movieFilenames,1),1,obj.numberOfAverages);
+            obj.sequence = 1:size(obj.movieFilenames,1);
             if obj.randomize == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
+            obj.sequence = repmat(obj.sequence,1,obj.numberOfAverages);
             obj.counter = 1;
 
             % For identifying a good empirical rawMovieFrequency

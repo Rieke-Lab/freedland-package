@@ -20,7 +20,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        fileFolderType = symphonyui.core.PropertyType('char', 'row', {'+movies', '+additionalMovies'}) 
+        fileFolderType = symphonyui.core.PropertyType('char', 'row', {'+movies', '+additionalMovies', '+blurMovies'}) 
         sequence
         counter
         imageMatrix
@@ -51,16 +51,18 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             D = dir(obj.directory);
             
             % Find correct folder
-            seedName = [mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround)];
-            for a = 1:length(D)
-                if strfind(D(a).name,seedName) > 0
-                    folderName = D(a).name;
+            if ~strcmp(obj.fileFolder,'+blurMovies') % Doesn't require RF information
+                seedName = [mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround)];
+                for a = 1:length(D)
+                    if strfind(D(a).name,seedName) > 0
+                        folderName = D(a).name;
+                    end
                 end
-            end
             
-            % Correct directory, find movies
-            obj.directory = [obj.directory,'/',folderName];
-            D = dir(obj.directory);
+                % Correct directory, find movies
+                obj.directory = [obj.directory,'/',folderName];
+                D = dir(obj.directory);
+            end
             
             rawMovies = cell(size(D,1),1);
             testMovies = cell(size(D,1),1);
@@ -97,7 +99,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             end
             obj.sequence = repmat(obj.sequence,1,obj.numberOfAverages);
             obj.counter = 1;
-
+            
             % For identifying a good empirical rawMovieFrequency
             movieTimings(obj);
         end

@@ -11,13 +11,21 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         imageNo     = 5;    % natural image number (1 to 101)
         observerNo  = 1;    % observer number (1 to 19)
         
-        % Mask information
-        blurSigma     = 200; % sigma of Gaussian blur (in microns)
-        maskDiameter  = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.
+        % Blur information: how to blur each sequential step?
+        includeNaturalMovie = true; % whether to include unblurred variant
+        coneBlur     = 3; % sigma of Gaussian blur kernel (in microns) - first stage of filtering
+        subunitBlur  = 15; % sigma of Gaussian blur kernel (in microns) - second stage of filtering
+        lowerRectification = [-30, -15, 0, 15, Inf]; % Rectify values below each value. Inf ignores rectification for each pass through.
+        upperRectification = [-30, -15, 0, 15, Inf];  % Rectify values above each value. NaN ignores rectification for each pass through.
+        rgcBlur      = [50 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
+
+        % Set region for testing
+        centerDiameter  = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.
 
         % Additional parameters
+        randomize = true; % whether to randomize movies shown
         onlineAnalysis = 'extracellular'
-        numberOfAverages = uint16(1) % number of epochs to queue
+        numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
         
     end
@@ -30,6 +38,8 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         yTraj
         timeTraj
         imageMatrix
+        sequence
+        counter
     end
 
     methods
@@ -69,6 +79,31 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             obj.yTraj = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(...
                 obj.yTraj,obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix');
             obj.timeTraj = (0:(length(obj.xTraj)-1)) ./ 200; % convert DOVES resolution (200Hz) to seconds
+            
+            % Define all combinations manually (as a tree)
+            obj.sequence = [];
+            for a = 1:length(obj.coneBlur)
+                for b = 1:length(obj.subunitBlur)
+                    for c = 1:length(obj.lowerRectification)
+                        for d = 1:length(obj.upperRectification)
+                            for f = 1:length(obj.rgcBlur)
+                                tmp = [obj.coneBlur(a), obj.subunitBlur(b), obj.lowerRectification(c),...
+                                       obj.upperRectification(d) obj.rgcBlur(f)];
+                                obj.sequence = [obj.sequence; tmp];
+                            end
+                        end
+                    end
+                end
+            end
+            
+            if obj.includeNaturalMovie == true
+                obj.sequence = [obj.sequence; repelem(Inf, 1, size(obj.sequence,2))];
+            end
+            
+            if obj.randomize == true
+                obj.sequence = obj.sequence(randperm(size(obj.sequence,1)),:);
+            end
+            obj.counter = 0;
         end
         
         function prepareEpoch(obj, epoch)
@@ -80,11 +115,12 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             epoch.addResponse(device);
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             
-            % Add metadata from Stage.
-            epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
-            epoch.addParameter('micronsPerPixel',obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
-            epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
-            epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset'));
+            % Export specific parameters
+            epoch.addParameter('coneBlur_specific',obj.sequence(obj.counter+1,1));
+            epoch.addParameter('subunitBlur_specific',obj.sequence(obj.counter+1,2));
+            epoch.addParameter('lowerRectification_specific',obj.sequence(obj.counter+1,3));
+            epoch.addParameter('upperRectification_specific',obj.sequence(obj.counter+1,4));
+            epoch.addParameter('rgcBlur_specific',obj.sequence(obj.counter+1,5));
         end
         
         function p = createPresentation(obj)
@@ -94,9 +130,45 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             
             % Set background intensity
             p.setBackgroundColor(obj.backgroundIntensity)
+
+            %%% Filter image
+            % Units are in arcmin - we filter in the image at the scale of
+            % the DOVES database, then enlarge to fit the monitor
+            selection = obj.sequence(obj.counter+1,:);
+            disp(selection)
+            coneBlur_arcmin = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(selection(1),...
+                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+            subunitBlur_arcmin = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(selection(2),...
+                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+            rgcBlur_arcmin = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(selection(5),...
+                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
+            
+            % Convert rectification bounds from % contrast to 8-bit luminance
+            l_limit = (selection(3)/100 + 1) .* obj.backgroundIntensity .* 255;
+            u_limit = (selection(4)/100 + 1) .* obj.backgroundIntensity .* 255;
+            
+            if sum(selection == Inf) == length(selection) % Inf = unfiltered condition
+                % Raw image (unfiltered)
+                tmp = obj.imageMatrix;
+            else
+                % Apply cone blur
+                tmp = imgaussfilt(obj.imageMatrix,coneBlur_arcmin);
+                
+                % Apply subunit blur
+                tmp = imgaussfilt(tmp,subunitBlur_arcmin);
+                
+                % Rectify
+                if sum(selection(3:4) == Inf) == 0 % Inf = nonrectified condition
+                    tmp(tmp < l_limit) = l_limit;
+                    tmp(tmp > u_limit) = u_limit;
+                end
+                
+                % Apply RGC blur
+                tmp = imgaussfilt(tmp,rgcBlur_arcmin);
+            end
             
             % Insert image and sizing information for stage.
-            scene = stage.builtin.stimuli.Image(obj.imageMatrix);
+            scene = stage.builtin.stimuli.Image(tmp);
             scene.size = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(fliplr(size(obj.imageMatrix)),...
                 obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix'); % Convert to monitor units
             p0 = canvasSize/2;
@@ -124,19 +196,6 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 end
             end
             
-            %%% Create Gaussian envelope (pasted from Stage's code)
-            resolution = 512; % Stage default
-            step = 2 / (resolution - 1);
-            [xx, yy] = meshgrid(-1:step:1, -1:step:1);
-            distanceMatrix = sqrt(xx.^2 + yy.^2);
-
-            % Convert from um to canvas pixels
-            sigma = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(obj.blurSigma,...
-                obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
-            gaussian = uint8(exp(-distanceMatrix.^2 / (2 * sigma^2)) * 255);
-            scene.setMask = stage.core.Mask(gaussian);
-            %%%
-            
             % Add information to Stage
             p.addStimulus(scene);
             p.addController(scenePosition);
@@ -146,26 +205,31 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                     @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
             
-            if (obj.maskDiameter > 0) % Create mask
+            % Create center mask
+            if (obj.centerDiameter > 0)
                 
-                maskDiameterPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(obj.maskDiameter,...
+                % Convert to monitor pixels
+                maskDiameterPix = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(obj.centerDiameter,...
                     obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2pix');
                 
-                mask = stage.builtin.stimuli.Ellipse();
-                mask.position = canvasSize/2;
-                mask.color = obj.backgroundIntensity;
-                mask.radiusX = maskDiameterPix/2;
-                mask.radiusY = maskDiameterPix/2;
-                p.addStimulus(mask); %add mask
+                aperture = stage.builtin.stimuli.Rectangle();
+                aperture.position = canvasSize/2;
+                aperture.color = obj.backgroundIntensity;
+                aperture.size = [max(canvasSize) max(canvasSize)];
+                mask = stage.core.Mask.createCircularAperture(maskDiameterPix/max(canvasSize), 1024); %circular aperture
+                aperture.setMask(mask);
+                p.addStimulus(aperture); %add aperture
             end
+            
+            obj.counter = mod(obj.counter + 1,size(obj.sequence,1));
         end
 
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < obj.numberOfAverages;
+            tf = obj.numEpochsPrepared < size(obj.sequence,1) .* obj.numberOfAverages;
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < obj.numberOfAverages;
+            tf = obj.numEpochsCompleted < size(obj.sequence,1) .* obj.numberOfAverages;
         end
     end
 end

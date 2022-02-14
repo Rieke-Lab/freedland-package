@@ -147,7 +147,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             l_limit = (selection(3)/100 + 1) .* obj.backgroundIntensity .* 255;
             u_limit = (selection(4)/100 + 1) .* obj.backgroundIntensity .* 255;
             
-            if sum(selection == Inf) == length(selection) % Inf = unfiltered condition
+            if sum(selection == Inf) == length(selection) % All inf = unfiltered condition
                 % Raw image (unfiltered)
                 tmp = obj.imageMatrix;
             else
@@ -158,13 +158,15 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 tmp = imgaussfilt(tmp,subunitBlur_arcmin);
                 
                 % Rectify
-                if sum(selection(3:4) == Inf) == 0 % Inf = nonrectified condition
+                if sum(selection(3:4) == Inf) == 0 % Rectification = inf = nonrectified condition
                     tmp(tmp < l_limit) = l_limit;
                     tmp(tmp > u_limit) = u_limit;
                 end
                 
                 % Apply RGC blur
-                tmp = imgaussfilt(tmp,rgcBlur_arcmin);
+                if rgcBlur_arcmin > 0
+                    tmp = imgaussfilt(tmp,rgcBlur_arcmin);
+                end
             end
             
             % Insert image and sizing information for stage.

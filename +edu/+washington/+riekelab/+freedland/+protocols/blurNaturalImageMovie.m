@@ -8,7 +8,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         tailTime    = 250   % in ms
         
         % Natural image trajectory
-        imageNo     = 5;    % natural image number (1 to 101). Good movies: [71, 5, 100, 18]
+        imageNo     = 71;    % natural image number (1 to 101)
         observerNo  = 1;    % observer number (1 to 19)
         
         % Blur information: how to blur each sequential step?
@@ -17,7 +17,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         subunitBlur  = 15; % sigma of Gaussian blur kernel (in microns) - second stage of filtering
         lowerRectification = [-30, -15, 0, 15, Inf]; % Rectify values below each value. Inf ignores rectification for each pass through.
         upperRectification = [-30, -15, 0, 15, Inf];  % Rectify values above each value. NaN ignores rectification for each pass through.
-        rgcBlur      = [0, 50, 75, 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
+        rgcBlur      = [0 50 75 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
 
         % Set region for testing
         centerDiameter  = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.
@@ -104,6 +104,9 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 obj.sequence = obj.sequence(randperm(size(obj.sequence,1)),:);
             end
             obj.counter = 0;
+            
+            t = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3 + 1.5; % time (+1.5s rig delay)
+            disp(strcat('est. protocol time:',mat2str(length(obj.sequence) .* obj.numberOfAverages .* t / 60),'min'));
         end
         
         function prepareEpoch(obj, epoch)

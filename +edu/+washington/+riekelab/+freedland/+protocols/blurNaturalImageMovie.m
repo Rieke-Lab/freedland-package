@@ -8,16 +8,16 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         tailTime    = 250   % in ms
         
         % Natural image trajectory
-        imageNo     = 5;    % natural image number (1 to 101)
+        imageNo     = 5;    % natural image number (1 to 101). Good movies: [71, 5, 100, 18]
         observerNo  = 1;    % observer number (1 to 19)
         
         % Blur information: how to blur each sequential step?
         includeNaturalMovie = true; % whether to include unblurred variant
-        coneBlur     = 3; % sigma of Gaussian blur kernel (in microns) - first stage of filtering
+        coneBlur     = 1.5; % sigma of Gaussian blur kernel (in microns) - first stage of filtering
         subunitBlur  = 15; % sigma of Gaussian blur kernel (in microns) - second stage of filtering
         lowerRectification = [-30, -15, 0, 15, Inf]; % Rectify values below each value. Inf ignores rectification for each pass through.
         upperRectification = [-30, -15, 0, 15, Inf];  % Rectify values above each value. NaN ignores rectification for each pass through.
-        rgcBlur      = [50 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
+        rgcBlur      = [0, 50, 75, 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
 
         % Set region for testing
         centerDiameter  = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.

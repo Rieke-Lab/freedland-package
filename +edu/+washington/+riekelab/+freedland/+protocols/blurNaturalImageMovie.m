@@ -67,32 +67,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             [path,image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNo, obj.observerNo);
             image = image ./ max(image(:)); % Normalize (scale to monitor)
             obj.backgroundIntensity = mean(image(:));
-            
-            % Isolate Fourier properties
-            if strcmp(obj.naturalImage,'phase') || strcmp(obj.naturalImage,'magnitude')
-                FFT = fftshift(fft2(image));
-                amplitude = abs(FFT);
-                phase = unwrap(angle(FFT));% .* 180/pi; % Phase
-                
-                % Sanity check
-%                 originalImage = abs(ifft2(amplitude .* cos(phase) + amplitude .* sin(phase) .* 1i));
-
-                if strcmp(obj.naturalImage,'phase')
-                    image = abs(ifft2(cos(phase) + sin(phase) .* 1i));
-                    
-                    % Adjust background intensity to match original image
-                    for iter = 1:10
-                        image = image ./ max(image(:)) .* 255;
-                        image = image + (obj.backgroundIntensity - nanmean(image(:))); 
-                    end
-                elseif strcmp(obj.naturalImage,'magnitude')
-                    image = abs(ifft2(amplitude));
-                    image(image > 255) = 255;
-                    image = image + (obj.backgroundIntensity - nanmean(image(:)));
-                end
-            end
-            
-            obj.imageMatrix = uint8(image.*255);
+            obj.imageMatrix = uint8(image .* 255);
                     
             % Isolate DOVES eye trajectories
             obj.xTraj = path.x;
@@ -126,7 +101,13 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             end
             
             if obj.includeNaturalMovie == true
+                % +Inf == raw movie condition
                 obj.sequence = [obj.sequence; repelem(Inf, 1, size(obj.sequence,2))];
+            end
+            
+            if strcmp(obj.naturalImage,'phase') || strcmp(obj.naturalImage,'magnitude')
+                % -Inf == raw movie condition (with only isolated Fourier statistic)
+                obj.sequence = [obj.sequence; repelem(-Inf, 1, size(obj.sequence,2))]; % Raw Fourier condition
             end
             
             if obj.randomize == true
@@ -175,21 +156,53 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             rgcBlur_arcmin = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(selection(5),...
                 obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
             
-            % Convert rectification bounds from % contrast to 8-bit luminance
-            l_limit = (selection(3)/100 + 1) .* obj.backgroundIntensity .* 255;
-            u_limit = (selection(4)/100 + 1) .* obj.backgroundIntensity .* 255;
+            % Pull raw image
+            tmp = double(obj.imageMatrix);
             
-            if sum(selection == Inf) == length(selection) % All inf = unfiltered condition
-                % Raw image (unfiltered)
-                tmp = obj.imageMatrix;
-            else
+            % Isolate Fourier properties
+            if strcmp(obj.naturalImage,'phase') || strcmp(obj.naturalImage,'magnitude')
+                if sum(selection == Inf) ~= length(selection)
+                    
+                    % Isolate amplitude, phase
+                    FFT = fftshift(fft2(tmp));
+                    amplitude = abs(FFT);
+                    phase = unwrap(angle(FFT));
+                
+                    % Sanity check
+%                     originalImage = abs(ifft2(amplitude .* cos(phase) + amplitude .* sin(phase) .* 1i));
+
+                    if strcmp(obj.naturalImage,'phase')
+                        tmp = abs(ifft2(cos(phase) + sin(phase) .* 1i));
+
+                        % Adjust background intensity to match original image
+                        for iter = 1:10
+                            tmp = tmp ./ max(tmp(:)) .* 255;
+                            tmp = tmp + (obj.backgroundIntensity - nanmean(tmp(:))); 
+                        end
+                    elseif strcmp(obj.naturalImage,'magnitude')
+                        tmp = abs(ifft2(amplitude));
+                        tmp(tmp > 255) = 255;
+                        
+                        % Adjust background intensity to match original image
+                        tmp = tmp + (obj.backgroundIntensity - nanmean(tmp(:)));
+                    end
+                end
+            end
+            
+            % Apply blur
+            if sum(selection == Inf) ~= length(selection) && ... % All inf = unblurred condition
+               sum(selection == -Inf) ~= length(selection)       % All -inf = unblurred Fourier condition
+
                 % Apply cone blur
-                tmp = imgaussfilt(obj.imageMatrix,coneBlur_arcmin);
+                tmp = imgaussfilt(tmp,coneBlur_arcmin);
                 
                 % Apply subunit blur
                 tmp = imgaussfilt(tmp,subunitBlur_arcmin);
                 
-                % Rectify
+                %%% Rectify
+                % Convert rectification bounds from % contrast to 8-bit luminance
+                l_limit = (selection(3)/100 + 1) .* obj.backgroundIntensity .* 255;
+                u_limit = (selection(4)/100 + 1) .* obj.backgroundIntensity .* 255;
                 if sum(selection(3:4) == Inf) == 0 % Rectification = inf = nonrectified condition
                     tmp(tmp < l_limit) = l_limit;
                     tmp(tmp > u_limit) = u_limit;
@@ -202,7 +215,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             end
             
             % Insert image and sizing information for stage.
-            scene = stage.builtin.stimuli.Image(tmp);
+            scene = stage.builtin.stimuli.Image(uint8(tmp));
             scene.size = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(fliplr(size(obj.imageMatrix)),...
                 obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'arcmin2pix'); % Convert to monitor units
             p0 = canvasSize/2;

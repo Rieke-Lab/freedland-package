@@ -13,18 +13,21 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         
         % Blur information: how to blur each sequential step?
         includeNaturalMovie = true; % whether to include unblurred variant
-        coneBlur     = 1.5; % sigma of Gaussian blur kernel (in microns) - first stage of filtering
-        subunitBlur  = 15; % sigma of Gaussian blur kernel (in microns) - second stage of filtering
-        lowerRectification = [-30, -15, 0, 15, Inf]; % Rectify values below each value. Inf ignores rectification for each pass through.
-        upperRectification = [-30, -15, 0, 15, Inf];  % Rectify values above each value. NaN ignores rectification for each pass through.
-        rgcBlur      = [0 50 75 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
+        coneBlur    = 1.5; % sigma of Gaussian blur kernel (in microns) - first stage of filtering
+        subunitBlur = 15; % sigma of Gaussian blur kernel (in microns) - second stage of filtering
+        lowerRectification = [-30, -15, 0, 15, Inf]; % Rectify values below each value. Inf ignores rectification.
+        upperRectification = [-30, -15, 0, 15, Inf];  % Rectify values above each value. Inf ignores rectification.
+        rgcBlur	= [0 50 75 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
 
         % Set region for testing
-        centerDiameter  = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.
+        centerDiameter = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.
 
+        % Set image type
+        naturalImage = 'natural'; % natural image or select Fourier statistics.
+        
         % Additional parameters
-        randomize = true; % whether to randomize movies shown
-        onlineAnalysis = 'extracellular'
+        randomize        = true; % whether to randomize movies shown
+        onlineAnalysis   = 'extracellular'
         numberOfAverages = uint16(5) % number of epochs to queue
         amp % Output amplifier
         
@@ -33,6 +36,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
+        naturalImageType = symphonyui.core.PropertyType('char', 'row', {'natural', 'phase', 'magnitude'});
         backgroundIntensity
         xTraj
         yTraj
@@ -63,6 +67,31 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             [path,image] = edu.washington.riekelab.freedland.videoGeneration.utils.pathDOVES(obj.imageNo, obj.observerNo);
             image = image ./ max(image(:)); % Normalize (scale to monitor)
             obj.backgroundIntensity = mean(image(:));
+            
+            % Isolate Fourier properties
+            if strcmp(obj.naturalImage,'phase') || strcmp(obj.naturalImage,'magnitude')
+                FFT = fftshift(fft2(image));
+                amplitude = abs(FFT);
+                phase = unwrap(angle(FFT));% .* 180/pi; % Phase
+                
+                % Sanity check
+%                 originalImage = abs(ifft2(amplitude .* cos(phase) + amplitude .* sin(phase) .* 1i));
+
+                if strcmp(obj.naturalImage,'phase')
+                    image = abs(ifft2(cos(phase) + sin(phase) .* 1i));
+                    
+                    % Adjust background intensity to match original image
+                    for iter = 1:10
+                        image = image ./ max(image(:)) .* 255;
+                        image = image + (obj.backgroundIntensity - nanmean(image(:))); 
+                    end
+                elseif strcmp(obj.naturalImage,'magnitude')
+                    image = abs(ifft2(amplitude));
+                    image(image > 255) = 255;
+                    image = image + (obj.backgroundIntensity - nanmean(image(:)));
+                end
+            end
+            
             obj.imageMatrix = uint8(image.*255);
                     
             % Isolate DOVES eye trajectories

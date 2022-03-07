@@ -163,28 +163,36 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             if strcmp(obj.naturalImage,'phase') || strcmp(obj.naturalImage,'magnitude')
                 if sum(selection == Inf) ~= length(selection)
                     
-                    % Isolate amplitude, phase
+                    % Fourier transform
                     FFT = fftshift(fft2(tmp));
-                    amplitude = abs(FFT);
-                    phase = unwrap(angle(FFT));
                 
                     % Sanity check
 %                     originalImage = abs(ifft2(amplitude .* cos(phase) + amplitude .* sin(phase) .* 1i));
 
                     if strcmp(obj.naturalImage,'phase')
-                        tmp = abs(ifft2(cos(phase) + sin(phase) .* 1i));
-
-                        % Adjust background intensity to match original image
+                        
+                        % Isolate phase, invert FFT
+                        ph = angle(FFT);
+                        tmp = abs(ifft2(cos(ph) + sin(ph) .* 1i));
+                        
+                        % Pixel intensities are small; normalize
+                        tmp = tmp ./ max(tmp(:)) .* 255;
+                        
                         for iter = 1:10
-                            tmp = tmp ./ max(tmp(:)) .* 255;
-                            tmp = tmp + (obj.backgroundIntensity - nanmean(tmp(:))); 
+                            % Adjust background intensity
+                            tmp = tmp + (obj.backgroundIntensity.*255 - nanmean(tmp(:)));
+                            
+                            % Rectify pixels > 8-bit maximum
+                            tmp(tmp > 255) = 255;
                         end
                     elseif strcmp(obj.naturalImage,'magnitude')
-                        tmp = abs(ifft2(amplitude));
-                        tmp(tmp > 255) = 255;
                         
-                        % Adjust background intensity to match original image
-                        tmp = tmp + (obj.backgroundIntensity - nanmean(tmp(:)));
+                        % Isolate magnitude/amplitude, invert FFT
+                        amplit = abs(FFT);
+                        tmp = abs(ifft2(amplit));
+                        
+                        % Rectify pixels > 8-bit maximum
+                        tmp(tmp > 255) = 255;
                     end
                 end
             end

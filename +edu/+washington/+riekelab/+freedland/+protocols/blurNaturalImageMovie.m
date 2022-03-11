@@ -8,7 +8,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         tailTime    = 250   % in ms
         
         % Natural image trajectory
-        imageNo     = 71;    % natural image number (1 to 101)
+        imageNo     = 5;    % natural image number (1 to 101)
         observerNo  = 1;    % observer number (1 to 19)
         
         % Blur information: how to blur each sequential step?
@@ -16,15 +16,13 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         coneBlur    = 1.5; % sigma of Gaussian blur kernel (in microns) - first stage of filtering
         subunitBlur = 15; % sigma of Gaussian blur kernel (in microns) - second stage of filtering
         lowerRectification = [-30, -15, 0, 15, Inf]; % Rectify values below each value. Inf ignores rectification.
-        upperRectification = [-30, -15, 0, 15, Inf];  % Rectify values above each value. Inf ignores rectification.
+        upperRectification = [-30, -15, 0, 15, Inf]; % Rectify values above each value. Inf ignores rectification.
+        rectificationSite = 'both'; % where to place rectifier (both = test pre- and post-subunit rectification individually).
         rgcBlur	= [0 50 75 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
 
         % Set region for testing
         centerDiameter = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.
 
-        % Set image type
-        naturalImage = 'natural'; % natural image or select Fourier statistics.
-        
         % Additional parameters
         randomize        = true; % whether to randomize movies shown
         onlineAnalysis   = 'extracellular'
@@ -36,7 +34,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        naturalImageType = symphonyui.core.PropertyType('char', 'row', {'natural', 'phase', 'magnitude'});
+        rectificationSiteType = symphonyui.core.PropertyType('char', 'row', {'pre-subunit', 'post-subunit', 'both'});
         backgroundIntensity
         xTraj
         yTraj
@@ -100,14 +98,19 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 end
             end
             
+            % Identify where to place rectification threshold
+            if strcmp(obj.rectificationSite,'pre-subunit') % 0
+                obj.sequence = [obj.sequence,zeros(size(obj.sequence,1),1)];
+            elseif strcmp(obj.rectificationSite,'post-subunit') % 1
+                obj.sequence = [obj.sequence,ones(size(obj.sequence,1),1)];
+            elseif strcmp(obj.rectificationSite,'both')
+                obj.sequence = [obj.sequence,zeros(size(obj.sequence,1),1)];
+                obj.sequence = [obj.sequence;[obj.sequence(:,1:end-1), ones(size(obj.sequence,1),1)]];
+            end
+            
             if obj.includeNaturalMovie == true
                 % +Inf == raw movie condition
                 obj.sequence = [obj.sequence; repelem(Inf, 1, size(obj.sequence,2))];
-            end
-            
-            if strcmp(obj.naturalImage,'phase') || strcmp(obj.naturalImage,'magnitude')
-                % -Inf == raw movie condition (with only isolated Fourier statistic)
-                obj.sequence = [obj.sequence; repelem(-Inf, 1, size(obj.sequence,2))]; % Raw Fourier condition
             end
             
             if obj.randomize == true
@@ -134,6 +137,9 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             epoch.addParameter('lowerRectification_specific',obj.sequence(obj.counter+1,3));
             epoch.addParameter('upperRectification_specific',obj.sequence(obj.counter+1,4));
             epoch.addParameter('rgcBlur_specific',obj.sequence(obj.counter+1,5));
+            
+            rectificationSites = {'pre-subunit', 'post-subunit'};
+            epoch.addParameter('rectificationSite_specific',rectificationSites{obj.sequence(obj.counter+1,6)+1});
         end
         
         function p = createPresentation(obj)
@@ -158,60 +164,33 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             
             % Pull raw image
             tmp = double(obj.imageMatrix);
-            
-            % Isolate Fourier properties
-            if strcmp(obj.naturalImage,'phase') || strcmp(obj.naturalImage,'magnitude')
-                if sum(selection == Inf) ~= length(selection)
-                    
-                    % Fourier transform
-                    FFT = fftshift(fft2(tmp));
-                
-                    % Sanity check
-%                     originalImage = abs(ifft2(amplitude .* cos(phase) + amplitude .* sin(phase) .* 1i));
 
-                    if strcmp(obj.naturalImage,'phase')
-                        
-                        % Isolate phase, invert FFT
-                        ph = angle(FFT);
-                        tmp = abs(ifft2(cos(ph) + sin(ph) .* 1i));
-                        
-                        % Pixel intensities are small; normalize
-                        tmp = tmp ./ max(tmp(:)) .* 255;
-                        
-                        for iter = 1:10
-                            % Adjust background intensity
-                            tmp = tmp + (obj.backgroundIntensity.*255 - nanmean(tmp(:)));
-                            
-                            % Rectify pixels > 8-bit maximum
-                            tmp(tmp > 255) = 255;
-                        end
-                    elseif strcmp(obj.naturalImage,'magnitude')
-                        
-                        % Isolate magnitude/amplitude, invert FFT
-                        amplit = abs(FFT);
-                        tmp = abs(ifft2(amplit));
-                        
-                        % Rectify pixels > 8-bit maximum
-                        tmp(tmp > 255) = 255;
-                    end
-                end
-            end
-            
             % Apply blur
-            if sum(selection == Inf) ~= length(selection) && ... % All inf = unblurred condition
-               sum(selection == -Inf) ~= length(selection)       % All -inf = unblurred Fourier condition
+            if sum(selection == Inf) ~= length(selection) % All inf = natural image condition
 
                 % Apply cone blur
-                tmp = imgaussfilt(tmp,coneBlur_arcmin);
-                
-                % Apply subunit blur
-                tmp = imgaussfilt(tmp,subunitBlur_arcmin);
-                
-                %%% Rectify
+                if coneBlur_arcmin > 0
+                    tmp = imgaussfilt(tmp,coneBlur_arcmin);
+                end
+
                 % Convert rectification bounds from % contrast to 8-bit luminance
                 l_limit = (selection(3)/100 + 1) .* obj.backgroundIntensity .* 255;
                 u_limit = (selection(4)/100 + 1) .* obj.backgroundIntensity .* 255;
-                if sum(selection(3:4) == Inf) == 0 % Rectification = inf = nonrectified condition
+                rect_site = selection(6); % Site for rectifier
+                
+                % Pre-subunit rectification
+                if rect_site == 0 && sum(selection(3:4) == Inf) == 0 % Inf = nonrectified condition
+                    tmp(tmp < l_limit) = l_limit;
+                    tmp(tmp > u_limit) = u_limit;
+                end
+                
+                % Apply subunit blur
+                if subunitBlur_arcmin > 0
+                    tmp = imgaussfilt(tmp,subunitBlur_arcmin);
+                end
+                
+                % Post-subunit rectification
+                if rect_site == 1 && sum(selection(3:4) == Inf) == 0 % Rectification = inf = nonrectified condition
                     tmp(tmp < l_limit) = l_limit;
                     tmp(tmp > u_limit) = u_limit;
                 end

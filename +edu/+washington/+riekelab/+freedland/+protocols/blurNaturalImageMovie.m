@@ -15,10 +15,14 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
         includeNaturalMovie = true; % whether to include unblurred variant
         coneBlur    = 1.5; % sigma of Gaussian blur kernel (in microns) - first stage of filtering
         subunitBlur = 15; % sigma of Gaussian blur kernel (in microns) - second stage of filtering
-        lowerRectification = [-30, -15, 0, 15, Inf]; % Rectify values below each value. Inf ignores rectification.
-        upperRectification = [-30, -15, 0, 15, Inf]; % Rectify values above each value. Inf ignores rectification.
-        rectificationSite = 'both'; % where to place rectifier (both = test pre- and post-subunit rectification individually).
-        rgcBlur	= [0 50 75 100]; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
+        lowerRectification = [-90, -60, -30, 0, 30, Inf]; % Rectify values below each value. Inf ignores rectification.
+        upperRectification = [-30, 0, 30, 60, 90, Inf]; % Rectify values above each value. Inf ignores rectification.
+        rectificationSite  = 'post-subunit'; % where to place rectifier (both = test pre- and post-subunit rectification individually).
+        rgcBlur     = 0; % sigma of Gaussian blur kernel (in microns) - last stage of filtering
+        
+        % Binning pixels
+        binPixels = true; % bins pixels into values.
+        binSize = [0 10 20 30 50]; % in % contrast
 
         % Set region for testing
         centerDiameter = 300; % only present natural image in RF center (in microns). Set to 0 to ignore.
@@ -34,7 +38,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        rectificationSiteType = symphonyui.core.PropertyType('char', 'row', {'pre-subunit', 'post-subunit', 'both'});
+        rectificationSiteType = symphonyui.core.PropertyType('char', 'row', {'pre-subunit', 'post-subunit', 'testBoth'});
         backgroundIntensity
         xTraj
         yTraj
@@ -103,9 +107,17 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 obj.sequence = [obj.sequence,zeros(size(obj.sequence,1),1)];
             elseif strcmp(obj.rectificationSite,'post-subunit') % 1
                 obj.sequence = [obj.sequence,ones(size(obj.sequence,1),1)];
-            elseif strcmp(obj.rectificationSite,'both')
+            elseif strcmp(obj.rectificationSite,'testBoth')
                 obj.sequence = [obj.sequence,zeros(size(obj.sequence,1),1)];
                 obj.sequence = [obj.sequence;[obj.sequence(:,1:end-1), ones(size(obj.sequence,1),1)]];
+            end
+            
+            % Set up binning conditions
+            if obj.binPixels == false
+                obj.sequence = [obj.sequence zeros(size(obj.sequence,1),1)];
+            else
+                r = repelem(obj.binSize,size(obj.sequence,1));
+                obj.sequence = [repmat(obj.sequence,length(obj.binSize),1) r];
             end
             
             if obj.includeNaturalMovie == true
@@ -140,6 +152,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             
             rectificationSites = {'pre-subunit', 'post-subunit'};
             epoch.addParameter('rectificationSite_specific',rectificationSites{obj.sequence(obj.counter+1,6)+1});
+            epoch.addParameter('pixelBinning_specific',rectificationSites{obj.sequence(obj.counter+1,7)+1});
         end
         
         function p = createPresentation(obj)
@@ -164,7 +177,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             
             % Pull raw image
             tmp = double(obj.imageMatrix);
-
+            
             % Apply blur
             if sum(selection == Inf) ~= length(selection) % All inf = natural image condition
 
@@ -187,6 +200,32 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 % Apply subunit blur
                 if subunitBlur_arcmin > 0
                     tmp = imgaussfilt(tmp,subunitBlur_arcmin);
+                end
+                
+                %%% After subunit blur, apply binning
+                binningSize = selection(7);
+                if binningSize > 0
+                    
+                    % Relative to background
+                    background = obj.backgroundIntensity .* 255;
+                    binningSize_8bit = background .* binningSize/100;
+                    
+                    % Symmetrically scale from 0% contrast
+                    b_up = background:binningSize_8bit:255*2;
+                    b_bdown = background:-binningSize_8bit:-255;
+                    bins = [fliplr(b_bdown) b_up]; 
+    
+                    % Rectify values to closest bin
+                    for a = 1:size(tmp,1)
+                        for b = 1:size(tmp,2)
+                            [~,i] = min(abs(tmp(a,b) - bins));
+                            tmp(a,b) = bins(i);
+                        end
+                    end
+                    
+                    % Rectify to absolute bounds of 8-bit images
+                    tmp(tmp < 0) = 0;
+                    tmp(tmp > 255) = 255;
                 end
                 
                 % Post-subunit rectification

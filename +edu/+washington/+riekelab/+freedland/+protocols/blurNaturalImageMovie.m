@@ -292,8 +292,8 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 aperture = stage.builtin.stimuli.Rectangle();
                 aperture.position = canvasSize/2;
                 aperture.color = obj.backgroundIntensity;
-                aperture.size = [max(canvasSize) max(canvasSize)];
-                mask = stage.core.Mask.createCircularAperture(maskDiameterPix/max(canvasSize), 1024); %circular aperture
+                aperture.size = [max(canvasSize) max(canvasSize)].*2;
+                mask = stage.core.Mask.createCircularAperture(maskDiameterPix/max(canvasSize)/2, 1024); %circular aperture
                 aperture.setMask(mask);
                 p.addStimulus(aperture); %add aperture
             end

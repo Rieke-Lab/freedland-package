@@ -101,7 +101,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                     end
                 end
             end
-            
+
             % Identify where to place rectification threshold
             if strcmp(obj.rectificationSite,'pre-subunit') % 0
                 obj.sequence = [obj.sequence,zeros(size(obj.sequence,1),1)];
@@ -116,13 +116,13 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             if obj.binPixels == false
                 obj.sequence = [obj.sequence zeros(size(obj.sequence,1),1)];
             else
-                r = repelem(obj.binSize,size(obj.sequence,1));
+                r = repelem(obj.binSize',size(obj.sequence,1),1);
                 obj.sequence = [repmat(obj.sequence,length(obj.binSize),1) r];
             end
             
             if obj.includeNaturalMovie == true
                 % +Inf == raw movie condition
-                obj.sequence = [obj.sequence; repelem(Inf, 1, size(obj.sequence,2))];
+                obj.sequence = [repelem(Inf, 1, size(obj.sequence,2)); obj.sequence];
             end
             
             if obj.randomize == true
@@ -144,15 +144,20 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             epoch.addParameter('backgroundIntensity', obj.backgroundIntensity);
             
             % Export specific parameters
-            epoch.addParameter('coneBlur_specific',obj.sequence(obj.counter+1,1));
-            epoch.addParameter('subunitBlur_specific',obj.sequence(obj.counter+1,2));
-            epoch.addParameter('lowerRectification_specific',obj.sequence(obj.counter+1,3));
-            epoch.addParameter('upperRectification_specific',obj.sequence(obj.counter+1,4));
-            epoch.addParameter('rgcBlur_specific',obj.sequence(obj.counter+1,5));
+            A = obj.sequence(obj.counter+1,:);
+            epoch.addParameter('coneBlur_specific',A(1));
+            epoch.addParameter('subunitBlur_specific',A(2));
+            epoch.addParameter('lowerRectification_specific',A(3));
+            epoch.addParameter('upperRectification_specific',A(4));
+            epoch.addParameter('rgcBlur_specific',A(5));
             
             rectificationSites = {'pre-subunit', 'post-subunit'};
-            epoch.addParameter('rectificationSite_specific',rectificationSites{obj.sequence(obj.counter+1,6)+1});
-            epoch.addParameter('pixelBinning_specific',rectificationSites{obj.sequence(obj.counter+1,7)+1});
+            if A(6) ~= Inf % Non-natural image condition
+                epoch.addParameter('rectificationSite_specific',rectificationSites{A(6)+1});
+            else
+                epoch.addParameter('rectificationSite_specific',Inf);
+            end
+            epoch.addParameter('pixelBinning_specific',A(7));
         end
         
         function p = createPresentation(obj)
@@ -167,7 +172,6 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             % Units are in arcmin - we filter in the image at the scale of
             % the DOVES database, then enlarge to fit the monitor
             selection = obj.sequence(obj.counter+1,:);
-            disp(selection)
             coneBlur_arcmin = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(selection(1),...
                 obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'),'um2arcmin');
             subunitBlur_arcmin = edu.washington.riekelab.freedland.videoGeneration.utils.changeUnits(selection(2),...
@@ -184,6 +188,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 % Apply cone blur
                 if coneBlur_arcmin > 0
                     tmp = imgaussfilt(tmp,coneBlur_arcmin);
+                    disp(strcat(mat2str(selection(1)),'um cone blur applied...'))
                 end
 
                 % Convert rectification bounds from % contrast to 8-bit luminance
@@ -195,11 +200,13 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 if rect_site == 0 && sum(selection(3:4) == Inf) == 0 % Inf = nonrectified condition
                     tmp(tmp < l_limit) = l_limit;
                     tmp(tmp > u_limit) = u_limit;
+                    disp(strcat(mat2str([l_limit u_limit]),'% pre-subunit rectification applied...'))
                 end
                 
                 % Apply subunit blur
                 if subunitBlur_arcmin > 0
                     tmp = imgaussfilt(tmp,subunitBlur_arcmin);
+                    disp(strcat(mat2str(selection(2)),'um subunit blur applied...'))
                 end
                 
                 %%% After subunit blur, apply binning
@@ -213,32 +220,29 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                     % Symmetrically scale from 0% contrast
                     b_up = background:binningSize_8bit:255*2;
                     b_bdown = background:-binningSize_8bit:-255;
-                    bins = [fliplr(b_bdown) b_up]; 
-    
-                    % Rectify values to closest bin
-                    for a = 1:size(tmp,1)
-                        for b = 1:size(tmp,2)
-                            [~,i] = min(abs(tmp(a,b) - bins));
-                            tmp(a,b) = bins(i);
-                        end
-                    end
+                    bins = unique([fliplr(b_bdown) b_up]); 
                     
-                    % Rectify to absolute bounds of 8-bit images
+                    % Round to bins & rectify to absolute bounds of 8-bit images
+                    tmp = interp1(bins,bins,tmp,'nearest');
                     tmp(tmp < 0) = 0;
                     tmp(tmp > 255) = 255;
+                    disp(strcat(mat2str(selection(7)),'% contrast binning applied...'))
                 end
                 
                 % Post-subunit rectification
                 if rect_site == 1 && sum(selection(3:4) == Inf) == 0 % Rectification = inf = nonrectified condition
                     tmp(tmp < l_limit) = l_limit;
                     tmp(tmp > u_limit) = u_limit;
+                    disp(strcat(mat2str([l_limit u_limit]),'% post-subunit rectification applied...'))
                 end
                 
                 % Apply RGC blur
                 if rgcBlur_arcmin > 0
                     tmp = imgaussfilt(tmp,rgcBlur_arcmin);
+                    disp(strcat(mat2str(selection(3)),'um subunit blur applied...'))
                 end
             end
+            disp('...')
             
             % Insert image and sizing information for stage.
             scene = stage.builtin.stimuli.Image(uint8(tmp));

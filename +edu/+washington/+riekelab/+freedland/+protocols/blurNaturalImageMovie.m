@@ -220,12 +220,13 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                     % Symmetrically scale from 0% contrast
                     b_up = background:binningSize_8bit:255*2;
                     b_bdown = background:-binningSize_8bit:-255;
-                    bins = unique([fliplr(b_bdown) b_up]); 
+                    bins = [fliplr(b_bdown) b_up]; 
                     
                     % Round to bins & rectify to absolute bounds of 8-bit images
+                    bins(bins < 0) = 0;
+                    bins(bins > 255) = 255;
+                    bins = unique(bins);
                     tmp = interp1(bins,bins,tmp,'nearest');
-                    tmp(tmp < 0) = 0;
-                    tmp(tmp > 255) = 255;
                     disp(strcat(mat2str(selection(7)),'% contrast binning applied...'))
                 end
                 

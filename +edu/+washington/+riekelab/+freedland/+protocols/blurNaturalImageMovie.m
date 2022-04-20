@@ -222,10 +222,12 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                     b_bdown = background:-binningSize_8bit:-255;
                     bins = [fliplr(b_bdown) b_up]; 
                     
-                    % Round to bins & rectify to absolute bounds of 8-bit images
-                    bins(bins < 0) = 0;
-                    bins(bins > 255) = 255;
+                    % Remove bins (beyond 8-bit intensities)
+                    bins(bins < 0) = [];
+                    bins(bins > 255) = [];
                     bins = unique(bins);
+                    
+                    % Round to bins
                     tmp = interp1(bins,bins,tmp,'nearest');
                     disp(strcat(mat2str(selection(7)),'% contrast binning applied...'))
                 end

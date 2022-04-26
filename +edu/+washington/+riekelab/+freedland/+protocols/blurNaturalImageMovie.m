@@ -200,7 +200,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 if rect_site == 0 && sum(selection(3:4) == Inf) == 0 % Inf = nonrectified condition
                     tmp(tmp < l_limit) = l_limit;
                     tmp(tmp > u_limit) = u_limit;
-                    disp(strcat(mat2str([l_limit u_limit]),'% pre-subunit rectification applied...'))
+                    disp(strcat(mat2str([selection(3) selection(4)]),'% pre-subunit rectification applied...'))
                 end
                 
                 % Apply subunit blur
@@ -209,7 +209,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                     disp(strcat(mat2str(selection(2)),'um subunit blur applied...'))
                 end
                 
-                %%% After subunit blur, apply binning
+                %%% After blur (before rectification), apply binning
                 binningSize = selection(7);
                 if binningSize > 0
                     
@@ -229,14 +229,14 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                     
                     % Round to bins
                     tmp = interp1(bins,bins,tmp,'nearest');
-                    disp(strcat(mat2str(selection(7)),'% contrast binning applied...'))
+                    disp(strcat(mat2str(selection(7)),'% contrast binning (posterization) applied...'))
                 end
                 
                 % Post-subunit rectification
                 if rect_site == 1 && sum(selection(3:4) == Inf) == 0 % Rectification = inf = nonrectified condition
                     tmp(tmp < l_limit) = l_limit;
                     tmp(tmp > u_limit) = u_limit;
-                    disp(strcat(mat2str([l_limit u_limit]),'% post-subunit rectification applied...'))
+                    disp(strcat(mat2str([selection(3) selection(4)]),'% post-subunit rectification applied...'))
                 end
                 
                 % Apply RGC blur

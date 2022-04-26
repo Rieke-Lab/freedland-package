@@ -132,6 +132,7 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
             
             t = (obj.preTime + obj.stimTime + obj.tailTime) / 1e3 + 1.5; % time (+1.5s rig delay)
             disp(strcat('est. protocol time:',mat2str(length(obj.sequence) .* obj.numberOfAverages .* t / 60),'min'));
+            disp('...')
         end
         
         function prepareEpoch(obj, epoch)
@@ -243,6 +244,14 @@ classdef blurNaturalImageMovie < edu.washington.riekelab.protocols.RiekeLabStage
                 if rgcBlur_arcmin > 0
                     tmp = imgaussfilt(tmp,rgcBlur_arcmin);
                     disp(strcat(mat2str(selection(3)),'um subunit blur applied...'))
+                end
+                
+                % (If posterization is used): how may unique luminance values are left?
+                if binningSize > 0
+                    U = unique(tmp);
+                    U = round((U ./ background - 1) .* 100); % Convert to percent contrast
+                    U(isnan(U)) = [];
+                    disp(strcat(mat2str(length(U)), ' unique luminances present:',mat2str(U)))
                 end
             end
             disp('...')

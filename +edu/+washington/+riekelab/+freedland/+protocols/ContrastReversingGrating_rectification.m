@@ -5,8 +5,8 @@ classdef ContrastReversingGrating_rectification < edu.washington.riekelab.protoc
         stimTime = 2000 % ms
         tailTime = 250 % ms
         contrast = 0.9 % relative to mean (0-1)
-        rectificationDirection = 'above'; % rectify all contrast values ABOVE or BELOW value
-        rectificationContrast = 0.6; % relative to mean (0-1)
+        rectificationDirection = 'above'; % rectify all contrast values ABOVE or BELOW value (or both)
+        rectificationContrast = 0.6; % -1 to 1 (if direction = 'both', set as positive. will automatically apply to both positive and negative contrast values).
         temporalFrequency = 4 % Hz
         apertureDiameter = 300; % um
         maskDiameter = 0; % um
@@ -24,7 +24,7 @@ classdef ContrastReversingGrating_rectification < edu.washington.riekelab.protoc
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})
-        rectificationDirectionType = symphonyui.core.PropertyType('char', 'row', {'none', 'above', 'below'})
+        rectificationDirectionType = symphonyui.core.PropertyType('char', 'row', {'none', 'above', 'below', 'both'})
         barWidthSequence
         currentBarWidth
     end
@@ -171,6 +171,9 @@ classdef ContrastReversingGrating_rectification < edu.washington.riekelab.protoc
                     c(c > obj.rectificationContrast) = obj.rectificationContrast;
                 elseif strcmp(obj.rectificationDirection,'below')
                     c(c < obj.rectificationContrast) = obj.rectificationContrast;
+                elseif strcmp(obj.rectificationDirection,'both')
+                    c(c > obj.rectificationContrast) = obj.rectificationContrast;
+                    c(c < (-1.*obj.rectificationContrast)) = (-1.*obj.rectificationContrast);
                 end
             end
             

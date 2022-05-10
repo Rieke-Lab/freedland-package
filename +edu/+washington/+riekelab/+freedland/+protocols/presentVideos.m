@@ -3,8 +3,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
         % RF field information
-        rfSigmaCenter = 30; % (um) enter from difference of gaussians fit for overlaying receptive field.
-        rfSigmaSurround = 100; % (um) enter from difference of gaussians fit for overlaying receptive field.
+        centerDiameter = 300; % (um) enter from difference of gaussians fit for overlaying receptive field.
 
         randomize = true; % whether to randomize movies shown
         rawMovieFrequency = 0; % How often should we show the original movie amongst experimental movies? (i.e, 3 = every 3 experimental movies, we show 1 raw movie). Set to 0 to ignore.
@@ -52,7 +51,7 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % Find correct folder
             if ~strcmp(obj.fileFolder,'+blurMovies') % Doesn't require RF information
-                seedName = [mat2str(obj.rfSigmaCenter),'_',mat2str(obj.rfSigmaSurround)];
+                seedName = [mat2str(obj.centerDiameter),'umCenterDiameter'];
                 for a = 1:length(D)
                     if strfind(D(a).name,seedName) > 0
                         folderName = D(a).name;

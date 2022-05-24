@@ -1,17 +1,15 @@
 % Loads images for MEA
-classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+classdef presentImages_MEA < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     
     properties
         preTime     = 250 % in ms
         stimTime    = 250 % in ms
         tailTime    = 250 % in ms
         
-        fileFolder = '+flashImages'; % Folder in freedland-package containing videos
-        backgroundIntensity = 0.168; % 0 - 1 (corresponds to image intensities in folder)
-        centerBlur = 15; % in um
-        surroundBlur = 15; % in um
-        centerPosterization = 30; % in percent contrast
-        surroundPosterization = 30; % in percent contrast
+        fileFolder = '+MEA_images'; % Folder in freedland-package containing videos
+        backgroundIntensity = 0.15; % 0 - 1 (corresponds to image intensities in folder)
+        blur = 15; % in um
+        posterization = 30; % in percent contrast
         randomize = true; % whether to randomize movies shown
 
         % Additional parameters

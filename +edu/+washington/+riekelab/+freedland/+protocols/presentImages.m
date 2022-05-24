@@ -8,10 +8,11 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         fileFolder = '+flashImages'; % Folder in freedland-package containing videos
         backgroundIntensity = 0.168; % 0 - 1 (corresponds to image intensities in folder)
+        centerDiameter = 300;
         centerBlur = 15; % in um
-        surroundBlur = 15; % in um
-        centerPosterization = 30; % in percent contrast
-        surroundPosterization = 30; % in percent contrast
+        surroundBlur = 50; % in um
+        centerPosterization = 0; % in percent contrast
+        surroundPosterization = 0; % in percent contrast
         randomize = true; % whether to randomize movies shown
 
         % Additional parameters
@@ -23,7 +24,6 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'}) 
-        fileFolderType = symphonyui.core.PropertyType('char', 'row', {'+movies', '+additionalMovies', '+blurMovies'}) 
         sequence
         counter
         imagePaths
@@ -51,7 +51,13 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % General directory
             obj.directory = strcat('Documents/freedland-package/+edu/+washington/+riekelab/+freedland/',obj.fileFolder); % General folder
-            obj.directory = strcat(obj.directory,'meanLightIntensity-',mat2str(obj.backgroundIntensity),'/spatialBlur-',mat2str(obj.blur),'um/contrastPosterization-',mat2str(obj.posterization),'%'); % Add conditions
+            obj.directory = strcat(obj.directory,'/',mat2str(obj.centerDiameter),'umCenterDiameter/');
+            obj.directory = strcat(obj.directory,'centerBlur-',mat2str(obj.centerBlur),'um_surroundBlur-',mat2str(obj.surroundBlur),'/');
+            if (obj.centerBlur + obj.surroundBlur) == 0
+                obj.directory = strcat(obj.directory,'noPosterization');
+            else
+                obj.directory = strcat(obj.directory,'centerPosteriz-',mat2str(obj.centerPosterization),'_surroundPosteriz-',mat2str(obj.surroundPosterization));
+            end
             D = dir(obj.directory);
             
             obj.imagePaths = cell(size(D,1),1);
@@ -80,6 +86,7 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addResponse(device);
             
             epoch.addParameter('imageName',obj.imagePaths{obj.sequence(obj.counter),1});
+            epoch.addParameter('folder',obj.directory);
         end
         
         function p = createPresentation(obj)
@@ -89,14 +96,13 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3);
             
             % Rotate image
-            specificImage = obj.imagePaths{obj.sequence(obj.counter+1)};
+            specificImage = imread(fullfile(obj.directory, obj.imagePaths{obj.sequence(obj.counter+1)}));
             p.setBackgroundColor(obj.backgroundIntensity)   % Set background intensity
             
             % Prep to display image
-            scene = stage.builtin.stimuli.Image(specificImage);
+            scene = stage.builtin.stimuli.Image(uint8(specificImage));
             scene.size = [canvasSize(1),canvasSize(2)];
-            p0 = canvasSize/2;
-            scene.position = p0;
+            scene.position = canvasSize/2;
             
             % Use linear interpolation when scaling the image
             scene.setMinFunction(GL.LINEAR);
@@ -108,7 +114,7 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
                 @(state)state.time >= obj.preTime * 1e-3 && state.time < (obj.preTime + obj.stimTime) * 1e-3);
             p.addController(sceneVisible);
 
-            obj.counter = mod(obj.counter + 1,length(obj.order));
+            obj.counter = obj.counter + 1;
         end
 
         function tf = shouldContinuePreparingEpochs(obj)

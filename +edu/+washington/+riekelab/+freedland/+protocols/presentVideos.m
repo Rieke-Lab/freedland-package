@@ -113,12 +113,6 @@ classdef presentVideos < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             epoch.addResponse(device);
             
             epoch.addParameter('movieName',obj.movieFilenames{obj.sequence(obj.counter),1});
-
-            % Add metadata from Stage, makes analysis easier.
-            epoch.addParameter('canvasSize',obj.rig.getDevice('Stage').getConfigurationSetting('canvasSize'));
-            epoch.addParameter('micronsPerPixel',obj.rig.getDevice('Stage').getConfigurationSetting('micronsPerPixel'));
-            epoch.addParameter('monitorRefreshRate',obj.rig.getDevice('Stage').getConfigurationSetting('monitorRefreshRate'));
-            epoch.addParameter('centerOffset',obj.rig.getDevice('Stage').getConfigurationSetting('centerOffset')); % in pixels
         end
         
         function p = createPresentation(obj)

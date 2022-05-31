@@ -25,6 +25,12 @@ classdef contrastReversingGratingsCenterSurround < edu.washington.riekelab.proto
         surroundPhaseType = symphonyui.core.PropertyType('char', 'row', {'in-phase', 'out-of-phase'})
         sequence
         counter
+        xAxis
+        li
+    end
+    
+    properties (Hidden, Transient)
+        analysisFigure
     end
     
     methods
@@ -37,11 +43,57 @@ classdef contrastReversingGratingsCenterSurround < edu.washington.riekelab.proto
         function prepareRun(obj)
             prepareRun@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj);
             
+            % Arrange experiment conditions
+            counter2 = 1;
+            obj.sequence = zeros(length(obj.centerContrast).*length(obj.centerBarWidth).*length(obj.surroundContrast).*length(obj.surroundBarWidth),4);
+            for a = 1:length(obj.centerContrast)
+                for b = 1:length(obj.centerBarWidth)
+                    for c = 1:length(obj.surroundContrast)
+                        for d = 1:length(obj.surroundBarWidth)
+                            obj.sequence(counter2,:) = [obj.centerContrast(a), obj.centerBarWidth(b), obj.surroundContrast(c), obj.surroundBarWidth(d)];
+                            counter2 = counter2 + 1;
+                        end
+                    end
+                end
+            end
+            
+            % Identify experiment condition with most settings
+            l = [];
+            for a = 1:size(obj.sequence,2)
+                l(a) = length(unique(obj.sequence(:,a)));
+            end
+            [~,obj.li] = max(l);
+            obj.xAxis = unique(obj.sequence(:,obj.li)); % Define x-axis for figure.
+            
             obj.showFigure('symphonyui.builtin.figures.ResponseFigure', obj.rig.getDevice(obj.amp));
             obj.showFigure('edu.washington.riekelab.freedland.figures.MeanResponseFigure',...
                 obj.rig.getDevice(obj.amp),'recordingType',obj.onlineAnalysis,'splitEpoch',1);
             obj.showFigure('edu.washington.riekelab.freedland.figures.FrameTimingFigure',...
                 obj.rig.getDevice('Stage'), obj.rig.getDevice('Frame Monitor'));
+            
+            %%% M. Turner's analysis figure
+            if length(obj.xAxis) > 1
+                colors = edu.washington.riekelab.turner.utils.pmkmp(length(obj.xAxis),'CubicYF');
+            else
+                colors = [0 0 0];
+            end
+            if ~strcmp(obj.onlineAnalysis,'none')
+                % Custom figure handler
+                if isempty(obj.analysisFigure) || ~isvalid(obj.analysisFigure)
+                    obj.analysisFigure = obj.showFigure('symphonyui.builtin.figures.CustomFigure', @obj.CRGanalysis);
+                    f = obj.analysisFigure.getFigureHandle();
+                    set(f, 'Name', 'CRGs');
+                    obj.analysisFigure.userData.trialCounts = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F1 = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F2 = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.axesHandle = axes('Parent', f);
+                else
+                    obj.analysisFigure.userData.trialCounts = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F1 = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F2 = zeros(size(obj.xAxis));
+                end
+            end
+            %%%
             
             % Arrange experiment conditions
             counter2 = 1;
@@ -64,6 +116,63 @@ classdef contrastReversingGratingsCenterSurround < edu.washington.riekelab.proto
 
             obj.counter = 1;
             obj.sequence = repmat(obj.sequence,obj.numberOfAverages,1);
+            
+            %%% Quick bug fix: very last epoch won't play, so we double last
+            %%% condition and tell Symphony to present one less epoch
+            obj.sequence = [obj.sequence; obj.sequence(end,:)];
+        end
+        
+        function CRGanalysis(obj, ~, epoch) % Online analysis function by M. Turner
+            response = epoch.getResponse(obj.rig.getDevice(obj.amp));
+            epochResponseTrace = response.getData();
+            sampleRate = response.sampleRate.quantityInBaseUnits;
+            
+            axesHandle = obj.analysisFigure.userData.axesHandle;
+            trialCounts = obj.analysisFigure.userData.trialCounts;
+            F1 = obj.analysisFigure.userData.F1;
+            F2 = obj.analysisFigure.userData.F2;
+            
+            if strcmp(obj.onlineAnalysis,'extracellular') %spike recording
+                %take (prePts+1:prePts+stimPts)
+                epochResponseTrace = epochResponseTrace((sampleRate*obj.preTime/1000)+1:(sampleRate*(obj.preTime + obj.stimTime)/1000));
+                %count spikes
+                S = edu.washington.riekelab.turner.utils.spikeDetectorOnline(epochResponseTrace);
+                epochResponseTrace = zeros(size(epochResponseTrace));
+                epochResponseTrace(S.sp) = 1; %spike binary
+                
+            else %intracellular - Vclamp
+                epochResponseTrace = epochResponseTrace-mean(epochResponseTrace(1:sampleRate*obj.preTime/1000)); %baseline
+                %take (prePts+1:prePts+stimPts)
+                epochResponseTrace = epochResponseTrace((sampleRate*obj.preTime/1000)+1:(sampleRate*(obj.preTime + obj.stimTime)/1000));
+            end
+
+            L = length(epochResponseTrace); %length of signal, datapoints
+            X = abs(fft(epochResponseTrace));
+            X = X(1:L/2);
+            f = sampleRate*(0:L/2-1)/L; %freq - hz
+            [~, F1ind] = min(abs(f-obj.temporalFrequency)); %find index of F1 and F2 frequencies
+            [~, F2ind] = min(abs(f-2*obj.temporalFrequency));
+
+            F1power = 2*X(F1ind); %pA^2/Hz for current rec, (spikes/sec)^2/Hz for spike rate
+            F2power = 2*X(F2ind); %double b/c of symmetry about zero
+            
+            barInd = find(obj.sequence(obj.counter-1,obj.li) == obj.xAxis); % -1 because we already ran update
+            trialCounts(barInd) = trialCounts(barInd) + 1;
+            F1(barInd) = F1(barInd) + F1power;
+            F2(barInd) = F2(barInd) + F2power;
+            
+            cla(axesHandle);
+            h1 = line(obj.xAxis, F1./trialCounts, 'Parent', axesHandle);
+            set(h1,'Color','g','LineWidth',2,'Marker','o');
+            h2 = line(obj.xAxis, F2./trialCounts, 'Parent', axesHandle);
+            set(h2,'Color','r','LineWidth',2,'Marker','o');
+            hl = legend(axesHandle,{'F1','F2'});
+            xlabel(axesHandle,'Bar width (um)')
+            ylabel(axesHandle,'Amplitude')
+
+            obj.analysisFigure.userData.trialCounts = trialCounts;
+            obj.analysisFigure.userData.F1 = F1;
+            obj.analysisFigure.userData.F2 = F2;
         end
              
         function prepareEpoch(obj, epoch)
@@ -156,9 +265,7 @@ classdef contrastReversingGratingsCenterSurround < edu.washington.riekelab.proto
         end
  
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < (size(obj.sequence,1)-1); 
-            %%% To fix: last epoch doesn't start; quick fix is to simply
-            %%% not play very last protocol (so protocol finishes)
+            tf = obj.numEpochsPrepared < (size(obj.sequence,1)-1); % Present one less epoch
         end
         
         function tf = shouldContinueRun(obj)

@@ -196,6 +196,8 @@ classdef contrastReversingGratingsCenterSurround < edu.washington.riekelab.proto
             apertureDiameterPix = obj.rig.getDevice('Stage').um2pix(obj.apertureDiameter);
             centerBarWidthPix   = obj.rig.getDevice('Stage').um2pix(obj.sequence(obj.counter,2));
             surroundBarWidthPix = obj.rig.getDevice('Stage').um2pix(obj.sequence(obj.counter,4));
+            centerContrast_sp = obj.sequence(obj.counter,1);
+            surroundContrast_sp = obj.sequence(obj.counter,3);
             
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
@@ -236,10 +238,10 @@ classdef contrastReversingGratingsCenterSurround < edu.washington.riekelab.proto
                 if (obj.temporalFrequency > 0) 
                     if a == 1 % Center
                         grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
-                            @(state)getGrateContrastCenter(obj, state.time - obj.preTime/1e3));
+                            @(state)getGrateContrastCenter(obj, state.time - obj.preTime/1e3, centerContrast_sp));
                     else
                         grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
-                            @(state)getGrateContrastSurround(obj, state.time - obj.preTime/1e3));
+                            @(state)getGrateContrastSurround(obj, state.time - obj.preTime/1e3, surroundContrast_sp));
                     end
                     p.addController(grateContrast); %add the controller
                 end
@@ -249,15 +251,15 @@ classdef contrastReversingGratingsCenterSurround < edu.washington.riekelab.proto
                 p.addController(grateVisible);
             end
             
-            function c = getGrateContrastCenter(obj, time)
-                c = obj.sequence(obj.counter,1).*sin(2 * pi * obj.temporalFrequency * time);
+            function c = getGrateContrastCenter(obj, time, contrast)
+                c = contrast.*sin(2 * pi * obj.temporalFrequency * time);
             end
             
-            function c = getGrateContrastSurround(obj, time)
+            function c = getGrateContrastSurround(obj, time, contrast)
                 if strcmp(obj.surroundPhase,'in-phase')
-                    c = obj.sequence(obj.counter,3).*sin(2 * pi * obj.temporalFrequency * time);
+                    c = contrast.*sin(2 * pi * obj.temporalFrequency * time); % -1 to counter (plays after adding +1)
                 elseif strcmp(obj.surroundPhase,'out-of-phase')
-                    c = obj.sequence(obj.counter,3).*sin(2 * pi * obj.temporalFrequency * time) .* -1;
+                    c = contrast.*sin(2 * pi * obj.temporalFrequency * time) .* -1;
                 end
             end
             

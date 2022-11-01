@@ -24,6 +24,7 @@ classdef innerCenterContrastReversing < edu.washington.riekelab.protocols.RiekeL
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})
         gratingsLocationType = symphonyui.core.PropertyType('char', 'row', {'inner center', 'outer center', 'none'})
         otherRegionType = symphonyui.core.PropertyType('char', 'row', {'contrast reversing', 'static'})
+        xAxis
         sequence
         counter
     end
@@ -58,6 +59,8 @@ classdef innerCenterContrastReversing < edu.washington.riekelab.protocols.RiekeL
                 % Remove inner disks > size of outer center
                 rmv = (obj.sequence(:,1)) > obj.outerCenterDiameter;
                 obj.sequence(rmv,:) = [];
+                
+                obj.xAxis = obj.innerCenterDiameter;
             else
                 % Combine inner centers and gratings
                 obj.sequence = zeros(length(obj.innerCenterDiameter).*length(obj.gratingsWidth),2);
@@ -82,7 +85,33 @@ classdef innerCenterContrastReversing < edu.washington.riekelab.protocols.RiekeL
                  % (= case has no gratings!)
                 rmv = (obj.sequence(:,1)) >= obj.outerCenterDiameter; % Can't exactly fill RF
                 obj.sequence(rmv,:) = [];
+                
+                obj.xAxis = obj.innerCenterDiameter;
             end
+            
+            %%% M. Turner's analysis figure
+            if length(obj.xAxis) > 1
+                colors = edu.washington.riekelab.turner.utils.pmkmp(length(obj.xAxis),'CubicYF');
+            else
+                colors = [0 0 0];
+            end
+            if ~strcmp(obj.onlineAnalysis,'none')
+                % Custom figure handler
+                if isempty(obj.analysisFigure) || ~isvalid(obj.analysisFigure)
+                    obj.analysisFigure = obj.showFigure('symphonyui.builtin.figures.CustomFigure', @obj.CRGanalysis);
+                    f = obj.analysisFigure.getFigureHandle();
+                    set(f, 'Name', 'CRGs');
+                    obj.analysisFigure.userData.trialCounts = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F1 = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F2 = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.axesHandle = axes('Parent', f);
+                else
+                    obj.analysisFigure.userData.trialCounts = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F1 = zeros(size(obj.xAxis));
+                    obj.analysisFigure.userData.F2 = zeros(size(obj.xAxis));
+                end
+            end
+            %%%
    
             % Randomize order
             if obj.randomizeOrder == true
@@ -94,6 +123,59 @@ classdef innerCenterContrastReversing < edu.washington.riekelab.protocols.RiekeL
             
             %%% Quick bug fix: very last epoch won't play, so we double last condition
             obj.sequence = [obj.sequence; obj.sequence(end,:)];
+        end
+        
+        function CRGanalysis(obj, ~, epoch) % Online analysis function by M. Turner
+            response = epoch.getResponse(obj.rig.getDevice(obj.amp));
+            epochResponseTrace = response.getData();
+            sampleRate = response.sampleRate.quantityInBaseUnits;
+            
+            axesHandle = obj.analysisFigure.userData.axesHandle;
+            trialCounts = obj.analysisFigure.userData.trialCounts;
+            F1 = obj.analysisFigure.userData.F1;
+            F2 = obj.analysisFigure.userData.F2;
+            
+            if strcmp(obj.onlineAnalysis,'extracellular') %spike recording
+                %take (prePts+1:prePts+stimPts)
+                epochResponseTrace = epochResponseTrace((sampleRate*obj.preTime/1000)+1:(sampleRate*(obj.preTime + obj.stimTime)/1000));
+                %count spikes
+                S = edu.washington.riekelab.turner.utils.spikeDetectorOnline(epochResponseTrace);
+                epochResponseTrace = zeros(size(epochResponseTrace));
+                epochResponseTrace(S.sp) = 1; %spike binary
+                
+            else %intracellular - Vclamp
+                epochResponseTrace = epochResponseTrace-mean(epochResponseTrace(1:sampleRate*obj.preTime/1000)); %baseline
+                %take (prePts+1:prePts+stimPts)
+                epochResponseTrace = epochResponseTrace((sampleRate*obj.preTime/1000)+1:(sampleRate*(obj.preTime + obj.stimTime)/1000));
+            end
+
+            L = length(epochResponseTrace); %length of signal, datapoints
+            X = abs(fft(epochResponseTrace));
+            X = X(1:L/2);
+            f = sampleRate*(0:L/2-1)/L; %freq - hz
+            [~, F1ind] = min(abs(f-obj.temporalFrequency)); %find index of F1 and F2 frequencies
+            [~, F2ind] = min(abs(f-2*obj.temporalFrequency));
+
+            F1power = 2*X(F1ind); %pA^2/Hz for current rec, (spikes/sec)^2/Hz for spike rate
+            F2power = 2*X(F2ind); %double b/c of symmetry about zero
+            
+            barInd = find(obj.sequence(obj.counter-1) == obj.xAxis); % -1 because we already ran update
+            trialCounts(barInd) = trialCounts(barInd) + 1;
+            F1(barInd) = F1(barInd) + F1power;
+            F2(barInd) = F2(barInd) + F2power;
+            
+            cla(axesHandle);
+            h1 = line(obj.xAxis, F1./trialCounts, 'Parent', axesHandle);
+            set(h1,'Color','g','LineWidth',2,'Marker','o');
+            h2 = line(obj.xAxis, F2./trialCounts, 'Parent', axesHandle);
+            set(h2,'Color','r','LineWidth',2,'Marker','o');
+            hl = legend(axesHandle,{'F1','F2'});
+            xlabel(axesHandle,'Bar width (um)')
+            ylabel(axesHandle,'Amplitude')
+
+            obj.analysisFigure.userData.trialCounts = trialCounts;
+            obj.analysisFigure.userData.F1 = F1;
+            obj.analysisFigure.userData.F2 = F2;
         end
              
         function prepareEpoch(obj, epoch)

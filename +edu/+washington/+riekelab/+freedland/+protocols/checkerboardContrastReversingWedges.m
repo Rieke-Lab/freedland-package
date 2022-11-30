@@ -10,7 +10,7 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
         % Spatial parameters
         centerDiameter = 300; % in um
         wedges = 8; % radial wedges
-        circles = [2, 3, 4, 5]; % circular divisions
+        circles = [1, 2, 3, 4, 5]; % circular divisions
 
         % Stimulus parameters
         contrast = 0.9; % 0 - 1
@@ -29,6 +29,8 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})
         masks
         xAxis
+        sequence
+        counter
     end
     
     properties (Hidden, Transient)
@@ -131,9 +133,6 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
 
             obj.counter = 0;
             obj.sequence = repmat(obj.sequence,1,obj.numberOfAverages);
-
-            %%% Quick bug fix: very last epoch won't play, so we double last condition
-            obj.sequence = [obj.sequence, obj.sequence(end,:)];
         end
 
         function CRGanalysis(obj, ~, epoch) % Online analysis function by M. Turner
@@ -181,7 +180,7 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
             h2 = line(obj.xAxis, F2./trialCounts, 'Parent', axesHandle);
             set(h2,'Color','r','LineWidth',2,'Marker','o');
             hl = legend(axesHandle,{'F1','F2'});
-            xlabel(axesHandle,'Bar width (um)')
+            xlabel(axesHandle,'Number of circles')
             ylabel(axesHandle,'Amplitude')
 
             obj.analysisFigure.userData.trialCounts = trialCounts;
@@ -213,12 +212,13 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
                 grate           = stage.builtin.stimuli.Grating('square'); % Square wave grating
                 grate.size      = canvasSize;
                 grate.position  = canvasSize / 2;
+                grate.spatialFreq = 1e-5;
                 grate.color     = 2 * obj.backgroundIntensity; % Amplitude of square wave
                 grate.contrast  = obj.contrast; % Multiplier on square wave
                 grateShape      = uint8(specificMasks{a,1}*255);
                 grateMask       = stage.core.Mask(grateShape);
                 grate.setMask(grateMask);
-            
+              
                 % Contrasting gratings between each set of masks
                 if a == 1
                     grate.phase = 180;
@@ -246,11 +246,11 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
         end
  
         function tf = shouldContinuePreparingEpochs(obj)
-            tf = obj.numEpochsPrepared < (length(obj.sequence)-1); % Present one less epoch
+            tf = obj.numEpochsPrepared < length(obj.sequence);
         end
         
         function tf = shouldContinueRun(obj)
-            tf = obj.numEpochsCompleted < (length(obj.sequence)-1);
+            tf = obj.numEpochsCompleted < length(obj.sequence);
         end
         
         

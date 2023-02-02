@@ -14,7 +14,7 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
 
         % Stimulus parameters
         contrast = 0.9; % 0 - 1
-        temporalFrequency = 4 % Hz
+        temporalFrequency = 4 % Hz. Set to 0 for spatial flash
         backgroundIntensity = 0.168 % (0-1)
 
         % Additional
@@ -217,6 +217,7 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
                 grate.contrast  = obj.contrast; % Multiplier on square wave
                 grateShape      = uint8(specificMasks{a,1}*255);
                 grateMask       = stage.core.Mask(grateShape);
+                grate.contrast  = obj.contrast;
                 grate.setMask(grateMask);
               
                 % Contrasting gratings between each set of masks
@@ -229,9 +230,11 @@ classdef checkerboardContrastReversingWedges < edu.washington.riekelab.protocols
                 p.addStimulus(grate); % Add grating to the presentation
                 
                 % Control contrast
-                grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
-                    @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
-                p.addController(grateContrast); % Add the controller
+                if obj.temporalFrequency > 0
+                    grateContrast = stage.builtin.controllers.PropertyController(grate, 'contrast',...
+                        @(state)getGrateContrast(obj, state.time - obj.preTime/1e3));
+                    p.addController(grateContrast); % Add the controller
+                end
                 
                 % Hide during pre & post
                 grateVisible = stage.builtin.controllers.PropertyController(grate, 'visible', ...

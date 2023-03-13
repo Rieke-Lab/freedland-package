@@ -90,7 +90,7 @@ classdef spatialDiscontinuityGratings < edu.washington.riekelab.protocols.RiekeL
             m_outer2 = zeros(size(r));
             for a = 1:length(theta) - 1
                 m = (th >= theta(a) & th < theta(a+1)) .* (r <= centerRadius_px);
-                if mod(a,2) == 0
+                if mod(a,2) == 1 % Invert
                     m_outer1 = m_outer1 + m; % Individual masks
                 else
                     m_outer2 = m_outer2 + m; % Individual masks

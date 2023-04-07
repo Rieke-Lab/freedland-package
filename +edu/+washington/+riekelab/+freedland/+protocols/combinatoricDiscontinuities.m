@@ -70,7 +70,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             th = rad2deg(th);
             
             % Build different gratings conditions
-            gratingWedges = [obj.controlGratings; obj.replacedGratings];
+            gratingWedges = [obj.replacedGratings; obj.controlGratings];
             builtMasks = cell(length(gratingWedges),2);
             for iter = 1:2
                 % Pre-allocate space
@@ -90,12 +90,15 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
                 end
             end
             
+            % Define dimensional space
+            c_dim = length(obj.circularDivisions)-1;
+            
             % Define all sets of possible locations for spatial discontinuities
-            obj.combinatoricDivisions = zeros(1,length(obj.circularDivisions)-1);
-            for a = 1:length(obj.circularDivisions)-1
-                tmp = nchoosek(1:length(obj.circularDivisions)-1,a);
+            obj.combinatoricDivisions = zeros(1,c_dim);
+            for a = 1:c_dim
+                tmp = nchoosek(1:c_dim,a);
                 for b = 1:size(tmp,1)
-                    tmp2 = zeros(1,length(obj.circularDivisions)-1);
+                    tmp2 = zeros(1,c_dim);
                     tmp2(tmp(b,:)) = 1;
                     obj.combinatoricDivisions = [obj.combinatoricDivisions; tmp2];
                 end
@@ -103,47 +106,50 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             
             % Include additional conditions
             obj.combinatoricDivisions = [obj.combinatoricDivisions ones(size(obj.combinatoricDivisions,1),1)];
-            obj.combinatoricDivisions = [zeros(1,size(obj.combinatoricDivisions,2)); obj.combinatoricDivisions];
+            obj.combinatoricDivisions = [ones(1,size(obj.combinatoricDivisions,2)) .* 2; obj.combinatoricDivisions];
+            
+            % Double number of conditions for mismatched gratings
+            if obj.controlGratings ~= obj.replacedGratings
+                obj.combinatoricDivisions = [obj.combinatoricDivisions; ...
+                                             ones(1,size(obj.combinatoricDivisions,2)) .* -2; % Inverse control condition
+                                             obj.combinatoricDivisions(2:end,:) .* -1];
+            end
             
             % Interweave both grating conditions to build "distorted" stimuli
-            maskOrdering = [2 1];
             obj.masks = cell(size(obj.combinatoricDivisions,1),2);
-            for a = 1:size(obj.masks,1) % Each distorted stimulus
+            for a = 1:size(obj.combinatoricDivisions,1) % Each distorted stimulus
                 
                 % Identify combinatoric pattern
-                spatialDivisions = obj.circularDivisions(obj.combinatoricDivisions(a,:) == 1);
+                spatialDivisions = obj.circularDivisions(abs(obj.combinatoricDivisions(a,:)) == 1) ;
+                maskOrder = builtMasks;
+                if sum(obj.combinatoricDivisions(a,:)) < 0
+                    maskOrder = flipud(builtMasks); % For mismatched gratings, also reverse order
+                end
+            
                 tmp_stimulus = zeros(size(r));
                 tmp_tracker = zeros(size(r));
                 if ~isempty(spatialDivisions)
             
                     %%% Place gratings from inner center outwards
-                    % First dimension regulates which type of gratings to add
-                    % mod(b,2)+1 regulates whether to add in-phase or out-of-phase region
+                    % First dimension regulates which gratings to add
+                    % mod(b,2)+1 regulates whether to add in-phase/out-of-phase region
                     for b = 1:length(spatialDivisions)
                         innerArea = (r <= (centerRadius_px .* spatialDivisions(b)/100));  
             
-                        if strcmp(obj.replacedRegion,'inner') 
-                            % Replace gratings for all but outer center
-                            if b < length(spatialDivisions)
-                                tmp1 = builtMasks{maskOrdering(1),mod(b,2)+1} .* innerArea - tmp_tracker;
-                            else
-                                tmp1 = builtMasks{maskOrdering(2),mod(b,2)+1} .* innerArea - tmp_tracker;
-                            end
-                        elseif strcmp(obj.replacedRegion,'outer')
-                            % Replace gratings for all but inner center
-                            if b > 1
-                                tmp1 = builtMasks{maskOrdering(1),mod(b,2)+1} .* innerArea - tmp_tracker;
-                            else
-                                tmp1 = builtMasks{maskOrdering(2),mod(b,2)+1} .* innerArea - tmp_tracker;
-                            end
+                        % Replace gratings for all but outer center
+                        if b < length(spatialDivisions)
+                            tmp1 = maskOrder{1,mod(b,2)+1} .* innerArea - tmp_tracker;
+                        else
+                            tmp1 = maskOrder{2,mod(b,2)+1} .* innerArea - tmp_tracker;
                         end
+            
                         tmp1(tmp1 < 0) = 0;
                         tmp_tracker = tmp_tracker + innerArea;
                         tmp_stimulus = tmp_stimulus + tmp1;
                     end
                     obj.masks{a,1} = tmp_stimulus;
                 else
-                    obj.masks{a,1} = builtMasks{maskOrdering(1),1} .* (r <= (centerRadius_px));
+                    obj.masks{a,1} = maskOrder{1,1} .* (r <= (centerRadius_px));
                 end
             end
 

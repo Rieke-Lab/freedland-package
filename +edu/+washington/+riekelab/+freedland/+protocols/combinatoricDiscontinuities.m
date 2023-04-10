@@ -11,7 +11,6 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
         controlGratings = 2; % Number of wedges in baseline stimulus (2 = split-field spot)
         circularDivisions = [20, 40, 60, 80, 100]; % Location of spatial discontinuities (% of RF center)
         replacedGratings = 8; % Number of wedges for replaced stimulus
-        replacedRegion = 'inner' % inner or outer center
 
         % Stimulus parameters
         centerDiameter = 300; % in um
@@ -70,7 +69,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             th = rad2deg(th);
             
             % Build different gratings conditions
-            gratingWedges = [obj.replacedGratings; obj.controlGratings];
+            gratingWedges = [obj.controlGratings; obj.replacedGratings];
             builtMasks = cell(length(gratingWedges),2);
             for iter = 1:2
                 % Pre-allocate space
@@ -91,7 +90,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             end
             
             % Define dimensional space
-            c_dim = length(obj.circularDivisions)-1;
+            c_dim = length(obj.circularDivisions);
             
             % Define all sets of possible locations for spatial discontinuities
             obj.combinatoricDivisions = zeros(1,c_dim);
@@ -105,52 +104,59 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             end
             
             % Include additional conditions
-            obj.combinatoricDivisions = [obj.combinatoricDivisions ones(size(obj.combinatoricDivisions,1),1)];
-            obj.combinatoricDivisions = [ones(1,size(obj.combinatoricDivisions,2)) .* 2; obj.combinatoricDivisions];
-            
-            % Double number of conditions for mismatched gratings
             if obj.controlGratings ~= obj.replacedGratings
-                obj.combinatoricDivisions = [obj.combinatoricDivisions; ...
-                                             ones(1,size(obj.combinatoricDivisions,2)) .* -2; % Inverse control condition
-                                             obj.combinatoricDivisions(2:end,:) .* -1];
+                obj.combinatoricDivisions = [obj.combinatoricDivisions; ...     % [original + rotated gratings]
+                                             obj.combinatoricDivisions .* 2;... % [original + shuffled gratings]
+                                             obj.combinatoricDivisions + 2];    % [mixed shuffled gratings]
             end
+            obj.combinatoricDivisions = unique(obj.combinatoricDivisions,'rows');
+            
+            % Remove complements (already sampled via reversing contrasts)
+            for a = 1:size(obj.combinatoricDivisions)
+                tmp = obj.combinatoricDivisions(a,:);
+            
+                % Check for inverse cases (control gratings)
+                if sum(tmp == 1 | tmp == 0) == length(tmp)
+                    tmp2 = mod(tmp + 1,2);
+                    [~, i] = ismember(obj.combinatoricDivisions,tmp2,'rows');
+                    obj.combinatoricDivisions(logical(i),:) = NaN;
+                end
+            
+                % Check for inverse cases (replaced gratings)
+                if sum(tmp == 2 | tmp == 3) == length(tmp)
+                    tmp2 = mod(tmp + 1,2) + 2;
+                    [~, i] = ismember(obj.combinatoricDivisions,tmp2,'rows');
+                    obj.combinatoricDivisions(logical(i),:) = NaN;
+                end
+            end
+            obj.combinatoricDivisions = obj.combinatoricDivisions(~isnan(obj.combinatoricDivisions(:,1)),:);
             
             % Interweave both grating conditions to build "distorted" stimuli
             obj.masks = cell(size(obj.combinatoricDivisions,1),2);
             for a = 1:size(obj.combinatoricDivisions,1) % Each distorted stimulus
-                
-                % Identify combinatoric pattern
-                spatialDivisions = obj.circularDivisions(abs(obj.combinatoricDivisions(a,:)) == 1) ;
-                maskOrder = builtMasks;
-                if sum(obj.combinatoricDivisions(a,:)) < 0
-                    maskOrder = flipud(builtMasks); % For mismatched gratings, also reverse order
-                end
             
-                tmp_stimulus = zeros(size(r));
-                tmp_tracker = zeros(size(r));
-                if ~isempty(spatialDivisions)
+                maskMap = obj.combinatoricDivisions(a,:);
+                tmp = zeros(size(r));
             
-                    %%% Place gratings from inner center outwards
-                    % First dimension regulates which gratings to add
-                    % mod(b,2)+1 regulates whether to add in-phase/out-of-phase region
-                    for b = 1:length(spatialDivisions)
-                        innerArea = (r <= (centerRadius_px .* spatialDivisions(b)/100));  
+                for b = 1:length(maskMap) % Each outlying region
             
-                        % Replace gratings for all but outer center
-                        if b < length(spatialDivisions)
-                            tmp1 = maskOrder{1,mod(b,2)+1} .* innerArea - tmp_tracker;
-                        else
-                            tmp1 = maskOrder{2,mod(b,2)+1} .* innerArea - tmp_tracker;
-                        end
+                    % Build annulus
+                    innerDiameter = (b-1) / length(maskMap);
+                    outerDiameter = (b) / length(maskMap);
+                    maskArea = (r > (centerRadius_px .* innerDiameter) & r <= (centerRadius_px .* outerDiameter));
             
-                        tmp1(tmp1 < 0) = 0;
-                        tmp_tracker = tmp_tracker + innerArea;
-                        tmp_stimulus = tmp_stimulus + tmp1;
+                    if maskMap(b) == 0 % Original grating
+                        tmp = tmp + builtMasks{1,1} .* maskArea;
+                    elseif maskMap(b) == 1 % Rotated original grating
+                        tmp = tmp + builtMasks{1,2} .* maskArea;
+                    elseif maskMap(b) == 2 % Shuffled replaced grating
+                        tmp = tmp + builtMasks{2,1} .* maskArea;
+                    elseif maskMap(b) == 3 % Rotated replaced grating
+                        tmp = tmp + builtMasks{2,2} .* maskArea;
                     end
-                    obj.masks{a,1} = tmp_stimulus;
-                else
-                    obj.masks{a,1} = maskOrder{1,1} .* (r <= (centerRadius_px));
                 end
+                obj.masks{a,1} = tmp;
+                obj.masks{a,2} = mod(tmp+1,2) .* (r <= centerRadius_px);
             end
 
             % Randomize order

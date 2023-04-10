@@ -10,7 +10,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
         % Regular gratings
         controlGratings = 2; % Number of wedges in baseline stimulus (2 = split-field spot)
         circularDivisions = [20, 40, 60, 80, 100]; % Location of spatial discontinuities (% of RF center)
-        replacedGratings = 8; % Number of wedges for replaced stimulus
+        replacedGratings = 2; % Number of wedges for replaced stimulus
 
         % Stimulus parameters
         centerDiameter = 300; % in um
@@ -32,6 +32,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
         masks
         sequence
         counter
+        centerDisk
         combinatoricDivisions
     end
     
@@ -67,6 +68,8 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             nonsmooth = find(diff(th) > pi/2,1);
             th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
             th = rad2deg(th);
+            
+            obj.centerDisk = (r <= centerRadius_px);
             
             % Build different gratings conditions
             gratingWedges = [obj.controlGratings; obj.replacedGratings];
@@ -132,7 +135,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             obj.combinatoricDivisions = obj.combinatoricDivisions(~isnan(obj.combinatoricDivisions(:,1)),:);
             
             % Interweave both grating conditions to build "distorted" stimuli
-            obj.masks = cell(size(obj.combinatoricDivisions,1),2);
+            obj.masks = cell(size(obj.combinatoricDivisions,1),1);
             for a = 1:size(obj.combinatoricDivisions,1) % Each distorted stimulus
             
                 maskMap = obj.combinatoricDivisions(a,:);
@@ -156,7 +159,6 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
                     end
                 end
                 obj.masks{a,1} = tmp;
-                obj.masks{a,2} = mod(tmp+1,2) .* (r <= centerRadius_px);
             end
 
             % Randomize order
@@ -168,7 +170,6 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             obj.counter = 0;
             obj.sequence = repmat(obj.sequence,1,obj.numberOfAverages);
         end
-
         
         function prepareEpoch(obj, epoch)
             prepareEpoch@edu.washington.riekelab.protocols.RiekeLabStageProtocol(obj, epoch);
@@ -187,8 +188,6 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
 
-            specificMasks = obj.masks(obj.sequence(obj.counter+1),:);
-            
             % Add contrast reversing gratings
             for a = 1:2
                 grate           = stage.builtin.stimuli.Grating('square'); % Square wave grating
@@ -197,7 +196,13 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
                 grate.spatialFreq = 1e-5;
                 grate.color     = 2 * obj.backgroundIntensity; % Amplitude of square wave
                 grate.contrast  = obj.contrast; % Multiplier on square wave
-                grateShape      = uint8(specificMasks{a}*255);
+                
+                % Define in-phase and out-of-phase mask
+                specificMask = obj.masks{obj.sequence(obj.counter+1),1};
+                if a == 2
+                    specificMask = mod(specificMask + 1,2) .* obj.centerDisk;
+                end
+                grateShape      = uint8(specificMask*255);
                 grateMask       = stage.core.Mask(grateShape);
                 grate.contrast  = obj.contrast;
                 grate.setMask(grateMask);

@@ -15,6 +15,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
 
         % Stimulus parameters
         centerDiameter = 300; % in um
+        surroundDiameter = 600; % in um
         contrast = 0.9; % 0 - 1
         temporalFrequency = 4 % Hz. Set to 0 for spatial flash
         backgroundIntensity = 0.168 % (0-1)
@@ -61,6 +62,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
 
             % Starting parameters
             centerRadius_px = obj.rig.getDevice('Stage').um2pix(obj.centerDiameter)/2;
+            surroundRadius_px = obj.rig.getDevice('Stage').um2pix(obj.surroundDiameter)/2;
             canvasSize      = obj.rig.getDevice('Stage').getCanvasSize();
 
             % Define polar space
@@ -74,7 +76,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             
             % Define possible locations
             obj.centerDisk = (r <= centerRadius_px);
-            obj.surroundDisk = (r < min(canvasSize)/2);
+            obj.surroundDisk = (r <= surroundRadius_px);
             
             % Build sets of gratings to sample from
             gratingWedges = [obj.controlGratings; obj.replacedGratings];
@@ -169,6 +171,7 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
             centerRadius_px = obj.rig.getDevice('Stage').um2pix(obj.centerDiameter)/2;
+            surroundRadius_px = obj.rig.getDevice('Stage').um2pix(obj.surroundDiameter)/2;
             
             % Define polar space
             [xx,yy] = meshgrid(1:canvasSize(1),1:canvasSize(2));
@@ -185,8 +188,8 @@ classdef combinatoricDiscontinuities < edu.washington.riekelab.protocols.RiekeLa
                 if strcmp(obj.divisionLocation,'center')
                     maskArea = (r > (centerRadius_px .* innerDiameter) & r <= (centerRadius_px .* outerDiameter));
                 else % Surround
-                    surroundRadius_px = min(canvasSize)/2 - centerRadius_px;
-                    maskArea = (r > (surroundRadius_px .* innerDiameter + centerRadius_px) & r <= (surroundRadius_px .* outerDiameter + centerRadius_px));
+                    surroundWidth_px = surroundRadius_px - centerRadius_px;
+                    maskArea = (r > (surroundWidth_px .* innerDiameter + centerRadius_px) & r <= (surroundWidth_px .* outerDiameter + centerRadius_px));
                 end
 
                 if maskMap(b) == 0 % Original grating

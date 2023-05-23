@@ -94,6 +94,9 @@ classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageP
                     end
                 end
             end
+            
+            % Add control
+            obj.experimentTracker = [NaN NaN; obj.experimentTracker];
 
             estTime = size(obj.experimentTracker,1) * obj.numberOfAverages * ((obj.stimTime + obj.preTime + obj.tailTime + 500) / 1000 / 60);
             disp(strcat('estimated stimulus time:', mat2str(estTime),' min'))

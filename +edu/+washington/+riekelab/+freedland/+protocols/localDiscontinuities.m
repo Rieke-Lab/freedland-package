@@ -1,12 +1,16 @@
-% Contrast-reversing spots that produce varying temporal shifts throughout
-% the receptive field center. Eclectic set of 12 stimuli.
-classdef julianSpatialBowlOfMojo < edu.washington.riekelab.protocols.RiekeLabStageProtocol
+% Places local spatial discontinuities over wedge edges
+classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageProtocol
 
     properties
         % Basic parameters
         preTime = 250 % ms
         stimTime = 2000 % ms
         tailTime = 250 % ms
+
+        % Regular gratings
+        wedges = 4; % Number of wedges in baseline stimulus (2 = split-field spot)
+        discontinuitySize = 50; % in microns
+        discontinuityLocation = [0 25 50 75]; % Location of spatial discontinuities (% of RF)
 
         % Stimulus parameters
         centerDiameter = 300; % in um
@@ -24,12 +28,14 @@ classdef julianSpatialBowlOfMojo < edu.washington.riekelab.protocols.RiekeLabSta
     properties (Hidden)
         ampType
         onlineAnalysisType = symphonyui.core.PropertyType('char', 'row', {'none', 'extracellular', 'exc', 'inh'})
-        replacedRegionType = symphonyui.core.PropertyType('char', 'row', {'inner', 'outer'})
         masks
+        discontinuityMasks
         sequence
         counter
         centerDisk
-        combinatoricDivisions
+        surroundDisk
+        experimentTracker
+        centerTracker
     end
     
     properties (Hidden, Transient)
@@ -65,73 +71,35 @@ classdef julianSpatialBowlOfMojo < edu.washington.riekelab.protocols.RiekeLabSta
             th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
             th = rad2deg(th);
             
+            % Define possible locations
             obj.centerDisk = (r <= centerRadius_px);
-            
-            % Build different gratings conditions
-            gratingWedges = [2; 8];
-            builtMasks = cell(length(gratingWedges),2);
-            for iter = 1:2
-                % Pre-allocate space
-                for a = 1:2
-                    builtMasks{iter,a} = zeros(size(r));
-                end
-            
-                % Define wedges for each condition
-                A = gratingWedges(iter);
-                A(A == 0) = 1;
-                theta = 0:360/A:360;
-            
-                % Build each grating
-                for a = 1:length(theta) - 1
-                    m = (th >= theta(a) & th < theta(a+1)) .* (r <= centerRadius_px);
-                    builtMasks{iter,mod(a,2)+1} = builtMasks{iter,mod(a,2)+1} + m;
-                end
-            end
-            
-            % Define stimuli in Julian's spatial bowl of mojo
-            obj.combinatoricDivisions = [...
-                0	0	0	0	0
-                1	0	0	0	1
-                2	0	0	0	2
-                0	2	2	2	0
-                0	0	1	1	1
-                0	0	2	2	2
-                2	2	0	2	0
-                1	1	0	1	0
-                0	0	1	0	0
-                0	0	2	0	0
-                1	0	1	0	1
-                2	3	2	3	2];
-            
-            % Interweave both grating conditions to build "distorted" stimuli
-            obj.masks = cell(size(obj.combinatoricDivisions,1),1);
-            for a = 1:size(obj.combinatoricDivisions,1) % Each distorted stimulus
-            
-                maskMap = obj.combinatoricDivisions(a,:);
-                tmp = zeros(size(r));
-            
-                for b = 1:length(maskMap) % Each outlying region
-            
-                    % Build annulus
-                    innerDiameter = (b-1) / length(maskMap);
-                    outerDiameter = (b) / length(maskMap);
-                    maskArea = (r > (centerRadius_px .* innerDiameter) & r <= (centerRadius_px .* outerDiameter));
-            
-                    if maskMap(b) == 0 % Original grating
-                        tmp = tmp + builtMasks{1,1} .* maskArea;
-                    elseif maskMap(b) == 1 % Rotated original grating
-                        tmp = tmp + builtMasks{1,2} .* maskArea;
-                    elseif maskMap(b) == 2 % Shuffled replaced grating
-                        tmp = tmp + builtMasks{2,1} .* maskArea;
-                    elseif maskMap(b) == 3 % Rotated replaced grating
-                        tmp = tmp + builtMasks{2,2} .* maskArea;
-                    end
-                end
-                obj.masks{a,1} = tmp;
+
+            % Build wedges
+            obj.masks{1,1} = zeros(size(r));
+            obj.masks{1,2} = zeros(size(r));
+            A = obj.wedges;
+            A(A == 0) = 1;
+            theta = 0:360/A:360;
+            for a = 1:length(theta) - 1
+                m = (th >= theta(a) & th < theta(a+1));
+                obj.masks{1,mod(a,2)+1} = obj.masks{1,mod(a,2)+1} + m;
             end
 
+            % Build discontinuities
+            obj.experimentTracker = [];
+            for a = 1:length(theta)-1
+                for b = 1:length(obj.discontinuityLocation)
+                    if obj.discontinuityLocation(b) > 0 || (obj.discontinuityLocation(b) == 0 && a == 1)
+                        obj.experimentTracker = [obj.experimentTracker; theta(a) obj.discontinuityLocation(b)];
+                    end
+                end
+            end
+
+            estTime = size(obj.experimentTracker,1) * obj.numberOfAverages * ((obj.stimTime + obj.preTime + obj.tailTime + 500) / 1000 / 60);
+            disp(strcat('estimated stimulus time:', mat2str(estTime),' min'))
+
             % Randomize order
-            obj.sequence = 1:size(obj.masks,1);
+            obj.sequence = 1:size(obj.experimentTracker,1);
             if obj.randomizeOrder == true
                 obj.sequence = obj.sequence(randperm(length(obj.sequence)));
             end
@@ -148,7 +116,8 @@ classdef julianSpatialBowlOfMojo < edu.washington.riekelab.protocols.RiekeLabSta
             epoch.addDirectCurrentStimulus(device, device.background, duration, obj.sampleRate);
             epoch.addResponse(device);
 
-            epoch.addParameter('spatialDiscontinuities', obj.combinatoricDivisions(obj.sequence(obj.counter+1),:));
+            epoch.addParameter('specificTheta', obj.experimentTracker(obj.sequence(obj.counter+1),1));
+            epoch.addParameter('specificDistance', obj.experimentTracker(obj.sequence(obj.counter+1),2));
         end
 
         function p = createPresentation(obj)
@@ -156,6 +125,22 @@ classdef julianSpatialBowlOfMojo < edu.washington.riekelab.protocols.RiekeLabSta
             p = stage.core.Presentation((obj.preTime + obj.stimTime + obj.tailTime) * 1e-3); %create presentation of specified duration
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
+            centerRadius_px = obj.rig.getDevice('Stage').um2pix(obj.centerDiameter)/2;
+            discontinuityRadius_px = obj.rig.getDevice('Stage').um2pix(obj.discontinuitySize)/2;
+            
+            disp(obj.experimentTracker(obj.sequence(obj.counter+1),:))
+            theta = 180 - obj.experimentTracker(obj.sequence(obj.counter+1),1); % flip x-axis for monitor
+            distance = obj.experimentTracker(obj.sequence(obj.counter+1),2);
+            
+            % Convert to euclidean space
+            [xx,yy] = meshgrid(1:canvasSize(1),1:canvasSize(2));
+            rx = centerRadius_px .* distance/100 .* cos(deg2rad(theta));
+            ry = centerRadius_px .* distance/100 .* sin(deg2rad(theta));
+            r_tmp = sqrt((xx - canvasSize(1)/2 + rx).^2 + (yy - canvasSize(2)/2 + ry).^2);
+            discontinuity = (r_tmp < discontinuityRadius_px);
+            
+            m = cat(3,obj.masks{1,1} .* (discontinuity == 0) + discontinuity .* obj.masks{1,2},...
+                      obj.masks{1,2} .* (discontinuity == 0) + discontinuity .* obj.masks{1,1});
 
             % Add contrast reversing gratings
             for a = 1:2
@@ -165,13 +150,7 @@ classdef julianSpatialBowlOfMojo < edu.washington.riekelab.protocols.RiekeLabSta
                 grate.spatialFreq = 1e-5;
                 grate.color     = 2 * obj.backgroundIntensity; % Amplitude of square wave
                 grate.contrast  = obj.contrast; % Multiplier on square wave
-                
-                % Define in-phase and out-of-phase mask
-                specificMask = obj.masks{obj.sequence(obj.counter+1),1};
-                if a == 2
-                    specificMask = mod(specificMask + 1,2) .* obj.centerDisk;
-                end
-                grateShape      = uint8(specificMask*255);
+                grateShape      = uint8(m(:,:,a) .* obj.centerDisk .* 255);
                 grateMask       = stage.core.Mask(grateShape);
                 grate.contrast  = obj.contrast;
                 grate.setMask(grateMask);

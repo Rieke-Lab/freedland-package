@@ -8,8 +8,9 @@ classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageP
         tailTime = 250 % ms
 
         % Regular gratings
-        wedges = 4; % Number of wedges in baseline stimulus (2 = split-field spot)
-        discontinuitySize = 50; % in microns
+        wedges = 2; % Number of wedges in baseline stimulus (2 = split-field spot)
+        rotation = 0; % Rotate wedges as needed
+        discontinuityDiameter = 50; % in microns
         discontinuityLocation = [0 25 50 75]; % Location of spatial discontinuities (% of RF)
 
         % Stimulus parameters
@@ -70,6 +71,9 @@ classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageP
             nonsmooth = find(diff(th) > pi/2,1);
             th(1:nonsmooth,:) = th(1:nonsmooth,:) + pi;
             th = rad2deg(th);
+
+            % Apply rotation
+            th = mod(th + obj.rotation,360);
             
             % Define possible locations
             obj.centerDisk = (r <= centerRadius_px);
@@ -129,7 +133,7 @@ classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageP
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
             centerRadius_px = obj.rig.getDevice('Stage').um2pix(obj.centerDiameter)/2;
-            discontinuityRadius_px = obj.rig.getDevice('Stage').um2pix(obj.discontinuitySize)/2;
+            discontinuityRadius_px = obj.rig.getDevice('Stage').um2pix(obj.discontinuityDiameter)/2;
             
             disp(obj.experimentTracker(obj.sequence(obj.counter+1),:))
             theta = 180 - obj.experimentTracker(obj.sequence(obj.counter+1),1); % flip x-axis for monitor

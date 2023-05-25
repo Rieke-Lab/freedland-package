@@ -10,7 +10,7 @@ classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageP
         % Regular gratings
         wedges = 2; % Number of wedges in baseline stimulus (2 = split-field spot)
         rotation = 0; % Rotate wedges as needed
-        discontinuityDiameter = 50; % in microns
+        discontinuityDiameter = 50; % in microns. set to 0 to autosize to RF
         discontinuityLocation = [0 25 50 75]; % Location of spatial discontinuities (% of RF)
 
         % Stimulus parameters
@@ -134,7 +134,13 @@ classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageP
             p.setBackgroundColor(obj.backgroundIntensity); % Set background intensity
             canvasSize = obj.rig.getDevice('Stage').getCanvasSize();
             centerRadius_px = obj.rig.getDevice('Stage').um2pix(obj.centerDiameter)/2;
-            discontinuityRadius_px = obj.rig.getDevice('Stage').um2pix(obj.discontinuityDiameter)/2;
+            
+            if obj.discontinuityDiameter > 0
+                discontinuityRadius_px = obj.rig.getDevice('Stage').um2pix(obj.discontinuityDiameter)/2;
+            else
+                adjDiameter = obj.centerDiameter / length(obj.discontinuityLocation);
+                discontinuityRadius_px = obj.rig.getDevice('Stage').um2pix(adjDiameter)/2;
+            end
             
             disp(obj.experimentTracker(obj.sequence(obj.counter+1),:))
             theta = 180 - obj.experimentTracker(obj.sequence(obj.counter+1),1); % flip x-axis for monitor

@@ -94,7 +94,8 @@ classdef localDiscontinuities < edu.washington.riekelab.protocols.RiekeLabStageP
             for a = 1:length(theta)-1
                 for b = 1:length(obj.discontinuityLocation)
                     if obj.discontinuityLocation(b) > 0 || (obj.discontinuityLocation(b) == 0 && a == 1)
-                        obj.experimentTracker = [obj.experimentTracker; theta(a) obj.discontinuityLocation(b)];
+                        rotatedTheta = mod(theta(a) + obj.rotation,360);
+                        obj.experimentTracker = [obj.experimentTracker; rotatedTheta obj.discontinuityLocation(b)];
                     end
                 end
             end

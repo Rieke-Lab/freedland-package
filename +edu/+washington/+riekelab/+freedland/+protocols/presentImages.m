@@ -8,11 +8,6 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
         
         fileFolder = '+flashImages'; % Folder in freedland-package containing videos
         backgroundIntensity = 0.168; % 0 - 1 (corresponds to image intensities in folder)
-        centerDiameter = 300;
-        centerBlur = 15; % in um
-        surroundBlur = 50; % in um
-        centerPosterization = 0; % in percent contrast
-        surroundPosterization = 0; % in percent contrast
         randomize = true; % whether to randomize movies shown
 
         % Additional parameters
@@ -51,13 +46,6 @@ classdef presentImages < edu.washington.riekelab.protocols.RiekeLabStageProtocol
             
             % General directory
             obj.directory = strcat('Documents/freedland-package/+edu/+washington/+riekelab/+freedland/',obj.fileFolder); % General folder
-            obj.directory = strcat(obj.directory,'/',mat2str(obj.centerDiameter),'umCenterDiameter/');
-            obj.directory = strcat(obj.directory,'centerBlur-',mat2str(obj.centerBlur),'um_surroundBlur-',mat2str(obj.surroundBlur),'/');
-            if (obj.centerBlur + obj.surroundBlur) == 0
-                obj.directory = strcat(obj.directory,'noPosterization');
-            else
-                obj.directory = strcat(obj.directory,'centerPosteriz-',mat2str(obj.centerPosterization),'_surroundPosteriz-',mat2str(obj.surroundPosterization));
-            end
             D = dir(obj.directory);
             
             obj.imagePaths = cell(size(D,1),1);
